@@ -16,15 +16,17 @@ remain in their own packages.
 - SOF firmware/topology, the `yogabook` ALSA card, UCM devices, PipeWire and
   raw speaker state;
 - Halo keyboard/touchpad/haptics, Wacom pen and display touchscreen presence;
-- IIO sensors and SensorProxy;
+- the exact Halo keyboard, touchpad, dual-haptic and IIO sensor layout;
+- Wi-Fi, Bluetooth, eMMC, SD slot/card, USB, DSI display and platform LEDs;
 - XMM7260/ModemManager, adapting expectations when no SIM is installed;
-- GNSS, cameras, battery and charging;
+- GNSS transport, both camera sensors, battery and charging;
 - direct PCM formats, microphone signal and audio across suspend/resume;
 - guided physical acceptance for behavior software cannot prove.
 
-Automated results never imply that a speaker, microphone, pen, camera or
-sensor works physically. Every report therefore contains separate
-`AUTOMATED_RESULT` and `PHYSICAL_ACCEPTANCE_RESULT` values.
+Automated results never imply that a speaker, microphone, pen, camera, sensor,
+radio, removable-media slot or hardware button works physically. Every report
+therefore contains separate `AUTOMATED_RESULT` and
+`PHYSICAL_ACCEPTANCE_RESULT` values.
 
 ## Install
 
@@ -34,7 +36,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.1.1_all.deb
+sudo apt install ../yogabook-validator_0.2.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -42,6 +44,7 @@ Open **Yoga Book Validator** from the application menu, or run:
 ```bash
 yogabook-validator check
 yogabook-validator audio
+yogabook-validator camera
 yogabook-validator suspend 8
 yogabook-validator gnss
 yogabook-validator physical
@@ -65,11 +68,17 @@ matrix playback uses digital silence. Report bundles exclude WAV recordings
 and ALSA state snapshots because they may contain personal or machine-specific
 data.
 
+The camera test records which AtomISP sensor links were active, streams only to
+`/dev/null`, and restores the original links on success, failure, interruption,
+or timeout. It never stores an image.
+
 ## Commands
 
 `check` performs the read-only full-stack audit. `audio` tests PCM0 playback and
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
-playback, the bounded tone, and non-empty Mic1 capture. `suspend` keeps silent
+playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
+AtomISP media route, captures three frames from each sensor to `/dev/null`, and
+restores the original route. `suspend` keeps silent
 full-duplex audio active across one suspend. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`
 compresses an existing report directory while excluding sensitive artifacts.

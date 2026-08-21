@@ -20,7 +20,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 APP_ID = "org.yogabook.Validator"
 INSTALLED_CLI = Path("/usr/bin/yogabook-validator")
-SOURCE_CLI = Path(__file__).resolve().parents[1] / "src" / "yogabook-validator"
+SOURCE_CLI = Path(__file__).resolve().parents[1] / "src" / "yogabook-validator.sh"
 CLI = Path(os.environ.get("YBV_CLI", INSTALLED_CLI if INSTALLED_CLI.exists() else SOURCE_CLI))
 
 PHYSICAL_CHECKS = [
@@ -33,12 +33,20 @@ PHYSICAL_CHECKS = [
     ("halo-keys", "Halo keyboard keys map correctly"),
     ("halo-touchpad", "Halo touchpad tracks and clicks correctly"),
     ("halo-haptics", "Both Halo haptic actuators respond"),
+    ("halo-backlight", "Halo keyboard backlight brightness control works"),
     ("pen-direction", "Pen directions match the display in all axes"),
     ("pen-pressure", "Pen pressure works in a drawing application"),
     ("display-touch", "Display touchscreen works in keyboard and pen modes"),
     ("auto-rotation", "Display rotates correctly and returns to landscape"),
+    ("display-brightness", "Display brightness changes smoothly under manual control"),
     ("front-camera", "Front camera produces a usable image"),
     ("rear-camera", "Rear camera produces a usable image"),
+    ("wifi", "Wi-Fi connects and transfers data reliably"),
+    ("bluetooth", "Bluetooth can discover, pair and exchange data or audio"),
+    ("usb-otg", "Micro-USB OTG detects and cleanly removes an attached device"),
+    ("sd-card", "Inserted SD card can be read and written"),
+    ("hardware-buttons", "Power and volume buttons generate the expected actions"),
+    ("lid-switch", "Lid or keyboard-cover state is detected correctly"),
     ("lte-data", "LTE data connects (skip when no SIM is installed)"),
     ("gnss", "GNSS receives satellites outdoors"),
     ("suspend-resume", "Suspend/resume preserves working hardware"),
@@ -75,6 +83,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         for title, subtitle, callback, suggested in [
             ("Run passive audit", "Read-only checks; no administrator access", self.on_audit, True),
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
+            ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
             ("Test suspend", "Full-duplex audio across one suspend/resume cycle", self.on_suspend, False),
             ("Physical acceptance", "Record what you can hear, touch, and observe", self.on_physical, False),
         ]:
@@ -141,6 +150,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Suspend this tablet?",
             "The validator opens silent playback and capture streams, suspends for eight seconds, checks them after resume, and restores the previous audio state. Administrator authorization is required.",
             lambda: self.run_command("suspend", ["--yes", "--seconds", "8"]),
+        )
+
+    def on_camera(self, _button) -> None:
+        self.confirm(
+            "Test both cameras?",
+            "The validator briefly switches the AtomISP media route, captures three frames from each camera to /dev/null, and restores the original route. Images are not saved.",
+            lambda: self.run_command("camera", ["--yes"]),
         )
 
     def run_command(self, command: str, extra: list[str], output: Path | None = None) -> None:

@@ -11,7 +11,8 @@ required=(
 	README.md ATTRIBUTION.md CONTRIBUTING.md LICENSE Makefile
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
-	libexec/yogabook-validator-active.sh libexec/yogabook-validator-gnss.sh
+	libexec/yogabook-validator-active.sh libexec/yogabook-validator-camera.sh
+	libexec/yogabook-validator-gnss.sh
 	libexec/yogabook-validator-physical.sh libexec/yogabook-validator-full.sh
 	libexec/yogabook-validator-bundle.sh ui/yogabook_validator_ui.py
 	data/org.yogabook.Validator.desktop data/org.yogabook.validator.policy
@@ -68,6 +69,9 @@ if grep -Fq 'set _verb HiFi list _devices' "$root/libexec/yogabook-validator-che
 	exit 1
 fi
 grep -Fq "Built-in Audio Stereo Speakers" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'restore_route || true' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq -- '--stream-to=/dev/null' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'src" / "yogabook-validator.sh"' "$root/ui/yogabook_validator_ui.py"
 grep -Fq "exclude='*.wav'" "$root/libexec/yogabook-validator-bundle.sh"
 
 answers="$temporary/answers.tsv"
@@ -76,18 +80,51 @@ YBV_RESULTS_BASE="$temporary/results" YBV_LIBEXEC_DIR="$root/libexec" \
 	"$root/src/yogabook-validator.sh" physical --answers "$answers" --output "$temporary/physical"
 grep -Fq $'physical\tspeakers\tPASS' "$temporary/physical/results.tsv"
 grep -Fq 'PHYSICAL_ACCEPTANCE_RESULT: INCOMPLETE' "$temporary/physical/validator.log"
+python3 - "$root/ui/yogabook_validator_ui.py" "$temporary/physical/physical-results.tsv" <<'PY'
+import ast
+import csv
+import sys
+
+module = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+assignment = next(
+    node for node in module.body
+    if isinstance(node, ast.Assign)
+    and any(isinstance(target, ast.Name) and target.id == "PHYSICAL_CHECKS" for target in node.targets)
+)
+ui_ids = [item[0] for item in ast.literal_eval(assignment.value)]
+with open(sys.argv[2], newline="", encoding="utf-8") as stream:
+    shell_ids = [row["check_id"] for row in csv.DictReader(stream, delimiter="\t")]
+assert ui_ids == shell_ids, (ui_ids, shell_ids)
+PY
 
 fake="$temporary/root"
 mkdir -p "$fake/sys/class/dmi/id" "$fake/proc/asound/card7" "$fake/proc/bus/input" \
 	"$fake/lib/firmware/intel/sof" "$fake/lib/firmware/intel/sof-tplg" \
 	"$fake/usr/share/alsa/ucm2/conf.d/SOF" "$fake/usr/share/alsa/ucm2/cht-yogabook" \
 	"$fake/sys/bus/iio/devices" "$fake/sys/class/power_supply/BAT0" \
-	"$fake/sys/class/power_supply/USB0" "$fake/sys/class/backlight/panel" "$fake/dev"
+	"$fake/sys/class/power_supply/USB0" "$fake/sys/class/backlight/panel" \
+	"$fake/sys/class/drm/card1-DSI-1" "$fake/sys/class/net/wlp1s0/wireless" \
+	"$fake/sys/class/bluetooth/hci0" "$fake/sys/class/mmc_host/mmc1" \
+	"$fake/sys/class/leds/platform::charging" "$fake/sys/class/leds/platform::indicator" \
+	"$fake/sys/class/leds/ybwmi::kbd_backlight" "$fake/sys/block/mmcblk0/device" \
+	"$fake/sys/block/mmcblk1/device" "$fake/sys/bus/pci/devices/0000:01:00.0" \
+	"$fake/sys/bus/pci/devices/0000:00:14.0" "$fake/sys/bus/pci/drivers/brcmfmac" \
+	"$fake/sys/bus/pci/drivers/xhci_hcd" "$fake/dev"
 printf 'LenovoYB1-X91L\n' >"$fake/sys/class/dmi/id/product_name"
 printf 'LENOVO\n' >"$fake/sys/class/dmi/id/sys_vendor"
 printf ' 7 [yogabook      ]: sof-cht - sof-cht yogabook\n' >"$fake/proc/asound/cards"
 printf 'yogabook\n' >"$fake/proc/asound/card7/id"
-printf 'Wacom HID 169 Pen\nHiDeep Touchscreen\nHalo Keyboard\n' >"$fake/proc/bus/input/devices"
+printf '%s\n' \
+	'N: Name="Goodix Capacitive TouchScreen"' \
+	'N: Name="Halo Keyboard"' \
+	'N: Name="Halo Keyboard Touchpad"' \
+	'N: Name="drv260x:haptics"' \
+	'N: Name="drv260x:haptics"' \
+	'N: Name="Wacom HID 169 Pen"' \
+	'N: Name="HDP0001:00 2ABB:8102"' \
+	'N: Name="Lid Switch"' \
+	'N: Name="gpio-keys"' \
+	'N: Name="gpio-keys"' >"$fake/proc/bus/input/devices"
 printf 'firmware\n' >"$fake/lib/firmware/intel/sof/sof-cht.ri"
 printf 'topology\n' >"$fake/lib/firmware/intel/sof-tplg/sof-cht-rt5677.tplg"
 printf 'SectionUseCase."HiFi" {}\n' >"$fake/usr/share/alsa/ucm2/cht-yogabook/cht-yogabook.conf"
@@ -99,11 +136,40 @@ printf 'USB\n' >"$fake/sys/class/power_supply/USB0/type"
 printf '1\n' >"$fake/sys/class/power_supply/USB0/online"
 printf '42\n' >"$fake/sys/class/backlight/panel/brightness"
 printf '100\n' >"$fake/sys/class/backlight/panel/max_brightness"
+for sensor in als als accel_3d accel_3d accel_3d accel_3d hinge hinge sx9310; do
+	index=${iio_index:-0}
+	mkdir -p "$fake/sys/bus/iio/devices/iio:device$index"
+	printf '%s\n' "$sensor" >"$fake/sys/bus/iio/devices/iio:device$index/name"
+	iio_index=$((index + 1))
+done
+printf '0x14e4\n' >"$fake/sys/bus/pci/devices/0000:01:00.0/vendor"
+printf '0x43ec\n' >"$fake/sys/bus/pci/devices/0000:01:00.0/device"
+ln -s ../../drivers/brcmfmac "$fake/sys/bus/pci/devices/0000:01:00.0/driver"
+printf 'up\n' >"$fake/sys/class/net/wlp1s0/operstate"
+printf '0x8086\n' >"$fake/sys/bus/pci/devices/0000:00:14.0/vendor"
+printf '0x22b5\n' >"$fake/sys/bus/pci/devices/0000:00:14.0/device"
+ln -s ../../drivers/xhci_hcd "$fake/sys/bus/pci/devices/0000:00:14.0/driver"
+printf 'MMC\n' >"$fake/sys/block/mmcblk0/device/type"
+printf 'SD\n' >"$fake/sys/block/mmcblk1/device/type"
+printf 'connected\n' >"$fake/sys/class/drm/card1-DSI-1/status"
+printf 'enabled\n' >"$fake/sys/class/drm/card1-DSI-1/enabled"
+printf '1200x1920\n' >"$fake/sys/class/drm/card1-DSI-1/modes"
 touch "$fake/dev/halo_keyboard" "$fake/dev/video0"
 YBV_SYSROOT="$fake" YBV_LIBEXEC_DIR="$root/libexec" \
 	"$root/src/yogabook-validator.sh" check --output "$temporary/check" || true
 grep -Fq $'platform\tdmi\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'audio\talsa-card\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'input\thalo-keyboard\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'input\thalo-touchpad\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'input\thaptics\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'sensors\tiio-layout\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'wireless\twifi-driver\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'wireless\tbluetooth-controller\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'usb\tcontroller\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'storage\temmc\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'storage\tsd-card\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'display\tpanel\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'platform\tleds\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'power\tbattery\tPASS' "$temporary/check/results.tsv"
 
 echo 'Yoga Book Validator project checks: PASS'

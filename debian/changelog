@@ -1,3 +1,12 @@
+yogabook-validator (0.2.0) unstable; urgency=medium
+
+  * Add state-safe front and rear camera streaming tests.
+  * Validate named input, sensor, camera, wireless, storage and display devices.
+  * Expand GNSS integration and guided physical acceptance coverage.
+  * Fix source-tree UI discovery of the suffixed CLI implementation.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 01:35:00 +0200
+
 yogabook-validator (0.1.1) unstable; urgency=medium
 
   * Keep the passive audit from changing the active UCM verb.

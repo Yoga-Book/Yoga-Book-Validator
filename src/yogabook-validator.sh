@@ -17,6 +17,7 @@ Usage: yogabook-validator COMMAND [OPTIONS]
 Commands:
   check                  Run the passive full-stack audit
   audio                  Run state-safe audio transport and signal tests
+  camera                 Stream three frames from both cameras and restore route
   suspend [SECONDS]      Run active audio across one suspend/resume cycle
   gnss [OPTIONS]         Inspect GNSS; optionally require sky or a fix
   physical               Record guided physical acceptance
@@ -34,7 +35,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | gnss | physical | full | bundle)
+check | camera | gnss | physical | full | bundle)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 audio | suspend)

@@ -22,7 +22,7 @@ ybv_begin_report physical "$output_dir"
 physical_file="$YBV_REPORT_DIR/physical-results.tsv"
 printf 'check_id\tstatus\tnote\n' >"$physical_file"
 
-declare -a ids=(speakers headphones internal-microphone headset-microphone jack-detection headset-buttons halo-keys halo-touchpad halo-haptics pen-direction pen-pressure display-touch auto-rotation front-camera rear-camera lte-data gnss suspend-resume charging)
+declare -a ids=(speakers headphones internal-microphone headset-microphone jack-detection headset-buttons halo-keys halo-touchpad halo-haptics halo-backlight pen-direction pen-pressure display-touch auto-rotation display-brightness front-camera rear-camera wifi bluetooth usb-otg sd-card hardware-buttons lid-switch lte-data gnss suspend-resume charging)
 declare -a labels=(
 	'Stereo speakers play cleanly'
 	'Headphones play cleanly'
@@ -33,12 +33,20 @@ declare -a labels=(
 	'Halo keyboard keys map correctly'
 	'Halo touchpad tracks and clicks correctly'
 	'Both Halo haptic actuators respond'
+	'Halo keyboard backlight brightness control works'
 	'Pen directions match the display in all axes'
 	'Pen pressure works in a drawing application'
 	'Display touchscreen works in keyboard and pen modes'
 	'Display rotates correctly and returns to landscape'
+	'Display brightness changes smoothly under manual control'
 	'Front camera produces a usable image'
 	'Rear camera produces a usable image'
+	'Wi-Fi connects and transfers data reliably'
+	'Bluetooth can discover, pair and exchange data or audio'
+	'Micro-USB OTG detects and cleanly removes an attached device'
+	'Inserted SD card can be read and written'
+	'Power and volume buttons generate the expected actions'
+	'Lid or keyboard-cover state is detected correctly'
 	'LTE data connects (skip when no SIM is installed)'
 	'GNSS receives satellites outdoors'
 	'Suspend/resume preserves working hardware'
