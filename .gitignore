@@ -1,0 +1,15 @@
+/build/
+/dist/
+/yogabook-validator-results/
+*.buildinfo
+*.changes
+*.deb
+*.dsc
+*.tar.*
+__pycache__/
+*.pyc
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/yogabook-validator/
+debian/yogabook-validator.substvars

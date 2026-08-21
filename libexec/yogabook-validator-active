@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+set -Eeuo pipefail
+LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=yogabook-validator-common
+. "$LIBEXEC_DIR/yogabook-validator-common"
+
+[[ $EUID -eq 0 ]] || { echo 'ERROR: active tests must run as root' >&2; exit 2; }
+action=${1:-}
+[[ -n $action ]] || { echo 'ERROR: missing active test name' >&2; exit 2; }
+shift
+
+output_dir=
+assume_yes=false
+suspend_seconds=8
+while (($#)); do
+	case $1 in
+	--output)
+		[[ $# -ge 2 ]] || { echo 'ERROR: --output requires a directory' >&2; exit 2; }
+		output_dir=$2; shift 2 ;;
+	--yes) assume_yes=true; shift ;;
+	--seconds)
+		[[ $# -ge 2 ]] || { echo 'ERROR: --seconds requires a value' >&2; exit 2; }
+		suspend_seconds=$2; shift 2 ;;
+	*)
+		if [[ $action == suspend && $1 =~ ^[1-9][0-9]*$ ]]; then suspend_seconds=$1; shift
+		else echo "ERROR: unknown option: $1" >&2; exit 2
+		fi ;;
+	esac
+done
+[[ $suspend_seconds =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: suspend duration must be a positive integer' >&2; exit 2; }
+
+case $action in
+audio)
+	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
+suspend)
+	prompt="This test takes exclusive control of audio and suspends the tablet for ${suspend_seconds} seconds." ;;
+*) echo "ERROR: unsupported active test: $action" >&2; exit 2 ;;
+esac
+
+if [[ $assume_yes != true ]]; then
+	[[ -t 0 ]] || { echo 'ERROR: confirmation is required; use --yes after reviewing the operation' >&2; exit 2; }
+	printf '%s Continue? [y/N] ' "$prompt"
+	read -r answer
+	[[ $answer == y || $answer == Y || $answer == yes || $answer == YES ]] || exit 2
+fi
+
+ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
+for required in alsactl alsaucm aplay arecord timeout python3; do
+	ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
+done
+[[ $action != suspend ]] || ybv_has_command rtcwake || { echo 'ERROR: missing command: rtcwake' >&2; exit 2; }
+
+real_user=$(ybv_real_user)
+if [[ $real_user == root || -z $real_user ]] || ! id "$real_user" >/dev/null 2>&1; then
+	real_user=
+fi
+if [[ -n $real_user ]]; then
+	real_uid=$(id -u "$real_user")
+	real_home=$(getent passwd "$real_user" | cut -d: -f6)
+	if [[ -z $output_dir ]]; then
+		output_dir="/var/tmp/yogabook-validator-${real_uid}/${action}-$(date +%Y%m%d-%H%M%S)"
+	fi
+	canonical_output=$(realpath -m -- "$output_dir")
+	case $canonical_output in
+	"${real_home%/}"/* | "/var/tmp/yogabook-validator-${real_uid}"/*) ;;
+	*) echo 'ERROR: active report output must be inside the invoking user home or private /var/tmp results directory' >&2; exit 2 ;;
+	esac
+	output_dir=$canonical_output
+fi
+
+ybv_begin_report "$action" "$output_dir"
+card_number=$(ybv_find_card_number || true)
+if [[ -z $card_number ]]; then
+	ybv_emit audio alsa-card FAIL 'ALSA card ID yogabook is missing'
+	ybv_finish_report
+	exit 1
+fi
+
+state_file="$YBV_REPORT_DIR/alsa-state"
+capture_file="$YBV_REPORT_DIR/mic1.wav"
+services_stopped=false
+state_saved=false
+playback_pid=
+capture_pid=
+
+restore_state() {
+	local pid restore_rc=0
+	for pid in "$playback_pid" "$capture_pid"; do
+		[[ -n $pid ]] || continue
+		kill -TERM "$pid" 2>/dev/null || true
+		wait "$pid" 2>/dev/null || true
+	done
+	if [[ $state_saved == true ]]; then
+		alsactl -f "$state_file" restore yogabook >/dev/null 2>&1 || restore_rc=1
+	fi
+	if [[ $services_stopped == true && -n $real_user ]]; then
+		ybv_run_as_user "$real_user" systemctl --user start pipewire.socket pipewire-pulse.socket >/dev/null 2>&1 || restore_rc=1
+		ybv_run_as_user "$real_user" systemctl --user start pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || restore_rc=1
+	fi
+	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
+		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
+	fi
+	return "$restore_rc"
+}
+trap 'restore_state || true' EXIT INT TERM
+
+# Save before stopping WirePlumber: closing its UCM session temporarily disables
+# output routes, and saving after that point would persist a muted speaker.
+if alsactl -f "$state_file" store yogabook; then
+	state_saved=true
+	ybv_emit audio state-snapshot PASS 'Saved live ALSA state before stopping desktop audio'
+else
+	ybv_emit audio state-snapshot FAIL 'Could not save live ALSA state'
+	ybv_finish_report
+	exit 1
+fi
+
+if [[ -n $real_user ]]; then
+	ybv_run_as_user "$real_user" systemctl --user stop wireplumber pipewire-pulse pipewire pipewire-pulse.socket pipewire.socket || true
+	services_stopped=true
+	sleep 2
+fi
+
+if ybv_has_command fuser && fuser /dev/snd/pcm* >/dev/null 2>&1; then
+	ybv_capture 'PCM users after stopping desktop audio' fuser -v /dev/snd/pcm*
+	ybv_emit audio exclusive-access FAIL 'A PCM device remains open'
+	ybv_finish_report
+	exit 1
+else
+	ybv_emit audio exclusive-access PASS 'No competing PCM client remains'
+fi
+
+if alsaucm -c hw:yogabook set _verb HiFi set _enadev Speaker1 set _enadev Mic1 >>"$YBV_LOG" 2>&1; then
+	ybv_emit audio ucm-routes PASS 'Enabled HiFi Speaker1 and Mic1 routes'
+else
+	ybv_emit audio ucm-routes FAIL 'Could not enable UCM audio routes'
+fi
+
+run_pcm() {
+	local id=$1 summary=$2
+	shift 2
+	if timeout 15 "$@" >>"$YBV_LOG" 2>&1; then
+		ybv_emit audio "$id" PASS "$summary"
+	else
+		ybv_emit audio "$id" FAIL "$summary failed"
+	fi
+}
+
+if [[ $action == audio ]]; then
+	for format in S16_LE S24_LE S32_LE; do
+		run_pcm "pcm0-play-${format,,}" "PCM0 playback opens as $format, 48 kHz stereo" \
+			aplay -q -D hw:yogabook,0 -t raw -f "$format" -r 48000 -c 2 -d 1 /dev/zero
+		run_pcm "pcm0-capture-${format,,}" "PCM0 capture opens as $format, 48 kHz stereo" \
+			arecord -q -D hw:yogabook,0 -t raw -f "$format" -r 48000 -c 2 -d 1 /dev/null
+	done
+	run_pcm pcm1-deep-buffer 'PCM1 deep-buffer playback opens at 48 kHz stereo' \
+		aplay -q -D hw:yogabook,1 -t raw -f S32_LE -r 48000 -c 2 -d 1 /dev/zero
+
+	tone_file="$YBV_REPORT_DIR/tone.wav"
+	python3 - "$tone_file" <<'PY'
+import math, struct, sys, wave
+rate = 48000
+with wave.open(sys.argv[1], "wb") as wav:
+    wav.setparams((2, 2, rate, rate, "NONE", "not compressed"))
+    for i in range(rate):
+        value = int(0.08 * 32767 * math.sin(2 * math.pi * 440 * i / rate))
+        wav.writeframesraw(struct.pack("<hh", value, value))
+PY
+	run_pcm speaker-tone 'Played bounded one-second 440 Hz tone at 8% digital amplitude' \
+		aplay -q -D hw:yogabook,0 "$tone_file"
+	run_pcm mic-capture 'Recorded three-second Mic1 WAV' \
+		arecord -q -D hw:yogabook,0 -t wav -f S16_LE -r 48000 -c 2 -d 3 "$capture_file"
+	if [[ -s $capture_file ]]; then
+		signal=$(python3 - "$capture_file" <<'PY'
+import math, struct, sys, wave
+with wave.open(sys.argv[1], "rb") as wav:
+    frames = wav.readframes(wav.getnframes())
+samples = struct.unpack(f"<{len(frames)//2}h", frames) if frames else ()
+peak = max(map(abs, samples), default=0)
+rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
+print(f"peak={peak} ({peak/32768:.6f} FS), rms={rms:.2f} ({rms/32768:.6f} FS)")
+raise SystemExit(0 if peak and rms else 1)
+PY
+		) && ybv_emit audio mic-signal PASS 'Mic1 capture contains a non-empty signal' "$signal" || ybv_emit audio mic-signal FAIL 'Mic1 capture is digitally empty' "${signal:-no samples}"
+	else
+		ybv_emit audio mic-signal FAIL 'Mic1 WAV was not created'
+	fi
+else
+	stream_seconds=$((suspend_seconds + 14))
+	test_start=$(date --iso-8601=seconds)
+	timeout "$((stream_seconds + 10))" aplay -q -D hw:yogabook,0 -t raw -f S32_LE -r 48000 -c 2 -d "$stream_seconds" /dev/zero &
+	playback_pid=$!
+	timeout "$((stream_seconds + 10))" arecord -q -D hw:yogabook,0 -t raw -f S32_LE -r 48000 -c 2 -d "$stream_seconds" /dev/null &
+	capture_pid=$!
+	sleep 3
+	if kill -0 "$playback_pid" 2>/dev/null && kill -0 "$capture_pid" 2>/dev/null; then
+		ybv_emit suspend streams-before PASS 'Full-duplex streams remained active before suspend'
+	else
+		ybv_emit suspend streams-before FAIL 'Full-duplex streams exited before suspend'
+	fi
+	if rtcwake -m mem -s "$suspend_seconds" >>"$YBV_LOG" 2>&1; then
+		ybv_emit suspend rtcwake PASS 'Tablet resumed from suspend' "${suspend_seconds}s requested"
+	else
+		ybv_emit suspend rtcwake FAIL 'rtcwake suspend/resume failed'
+	fi
+	if wait "$playback_pid"; then ybv_emit suspend playback-after PASS 'Playback completed after resume'; else ybv_emit suspend playback-after FAIL 'Playback failed across suspend'; fi
+	playback_pid=
+	if wait "$capture_pid"; then ybv_emit suspend capture-after PASS 'Capture completed after resume'; else ybv_emit suspend capture-after FAIL 'Capture failed across suspend'; fi
+	capture_pid=
+	journal_slice=$(journalctl -k --since "$test_start" --no-pager 2>&1 || true)
+	printf '\n===== Suspend test kernel journal =====\n%s\n' "$journal_slice" >>"$YBV_LOG"
+	fatal=$(grep -Ei 'TRIG_STOP|unexpected fault|ipc.*(error|fail|timeout)|STREAM_PCM_PARAMS.*(-110|error|fail)|error: ipc' <<<"$journal_slice" || true)
+	if [[ -z $fatal ]]; then
+		ybv_emit suspend fatal-scan PASS 'No SOF/IPC fatal signature appeared during the test'
+	else
+		ybv_emit suspend fatal-scan FAIL 'SOF/IPC fatal signature appeared during the test' "$(head -n1 <<<"$fatal")"
+	fi
+fi
+
+# Restore now so its outcome is part of the report; the EXIT trap is a second
+# idempotent safety net for interruption and unexpected failures.
+if restore_state; then
+	state_saved=false
+	services_stopped=false
+	ybv_emit audio state-restore PASS 'Restored ALSA state and desktop audio services'
+else
+	ybv_emit audio state-restore FAIL 'ALSA state or desktop audio service restoration failed; EXIT trap will retry'
+fi
+YBV_PHYSICAL_RESULT=PENDING
+ybv_finish_report

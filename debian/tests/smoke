@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+yogabook-validator version
+yogabook-validator --help >/dev/null
+test -x /usr/bin/yogabook-validator-ui
+test -x /usr/libexec/yogabook-validator/yogabook-validator-active
+desktop-file-validate /usr/share/applications/org.yogabook.Validator.desktop

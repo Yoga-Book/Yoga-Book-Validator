@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.yogabook.Validator</id>
+  <name>Yoga Book Validator</name>
+  <summary>Validate Lenovo Yoga Book hardware integration</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0-or-later</project_license>
+  <developer id="org.yogabook">
+    <name>Yoga Book Project</name>
+  </developer>
+  <url type="homepage">https://github.com/Yoga-Book/Yoga-Book-Validator</url>
+  <description>
+    <p>Yoga Book Validator audits kernel, audio, Halo keyboard, pen, sensors, modem, GNSS, cameras, and power integration. It keeps automated results separate from guided physical acceptance.</p>
+  </description>
+  <launchable type="desktop-id">org.yogabook.Validator.desktop</launchable>
+  <provides><binary>yogabook-validator-ui</binary></provides>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="0.1.0" date="2026-08-22"/></releases>
+</component>

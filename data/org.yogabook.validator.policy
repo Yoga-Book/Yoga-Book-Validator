@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Yoga Book</vendor>
+  <vendor_url>https://github.com/Yoga-Book/Yoga-Book-Validator</vendor_url>
+  <action id="org.yogabook.validator.active-test">
+    <description>Run an active Yoga Book hardware test</description>
+    <message>Authentication is required to take exclusive control of audio or suspend the Yoga Book</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/yogabook-validator/yogabook-validator-active</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

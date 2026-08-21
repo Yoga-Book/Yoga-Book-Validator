@@ -1,0 +1,7 @@
+yogabook-validator (0.1.0) unstable; urgency=medium
+
+  * Initial CLI and GTK4/libadwaita validation suite for Yoga Book YB1-X91L.
+  * Add state-safe active audio and suspend tests.
+  * Keep automated evidence separate from guided physical acceptance.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 00:00:00 +0200

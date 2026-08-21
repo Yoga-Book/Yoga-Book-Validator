@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Yoga Book Validator
+Comment=Validate Lenovo Yoga Book hardware integration
+Exec=yogabook-validator-ui
+Icon=org.yogabook.Validator
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;
+Keywords=Yoga Book;hardware;validation;diagnostics;
+StartupNotify=true
