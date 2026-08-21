@@ -5,7 +5,7 @@
   <vendor_url>https://github.com/Yoga-Book/Yoga-Book-Validator</vendor_url>
   <action id="org.yogabook.validator.active-test">
     <description>Run an active Yoga Book hardware test</description>
-    <message>Authentication is required to take exclusive control of audio or suspend the Yoga Book</message>
+    <message>Authentication is required to run an active Yoga Book hardware test</message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>auth_admin</allow_inactive>

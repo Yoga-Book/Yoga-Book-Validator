@@ -12,7 +12,8 @@ Vcs-Browser: https://github.com/Yoga-Book/Yoga-Book-Validator
 Package: yogabook-validator
 Architecture: all
 Depends: ${misc:Depends}, alsa-utils, bash, coreutils,
- gir1.2-adw-1, gir1.2-gtk-4.0, pkexec, python3, python3-gi, util-linux
+ gir1.2-adw-1, gir1.2-gtk-4.0, pkexec, python3, python3-evdev,
+ python3-gi, util-linux
 Recommends: bluez, gpsd-clients, iio-sensor-proxy, modemmanager,
  pciutils, pipewire-bin, usbutils, v4l-utils, wireplumber
 Description: Lenovo Yoga Book hardware integration validator

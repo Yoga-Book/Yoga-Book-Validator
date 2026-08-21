@@ -84,6 +84,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Run passive audit", "Read-only checks; no administrator access", self.on_audit, True),
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
             ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
+            ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
             ("Test suspend", "Full-duplex audio across one suspend/resume cycle", self.on_suspend, False),
             ("Physical acceptance", "Record what you can hear, touch, and observe", self.on_physical, False),
         ]:
@@ -157,6 +158,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Test both cameras?",
             "The validator briefly switches the AtomISP media route, captures three frames from each camera to /dev/null, and restores the original route. Images are not saved.",
             lambda: self.run_command("camera", ["--yes"]),
+        )
+
+    def on_haptics(self, _button) -> None:
+        self.confirm(
+            "Test both haptic actuators?",
+            "The validator plays one moderate-strength 150 ms force-feedback pulse on the left actuator and then the right actuator. Administrator authorization is required.",
+            lambda: self.run_command("haptics", ["--yes"]),
         )
 
     def run_command(self, command: str, extra: list[str], output: Path | None = None) -> None:

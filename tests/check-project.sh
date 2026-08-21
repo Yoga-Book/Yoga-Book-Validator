@@ -69,6 +69,8 @@ if grep -Fq 'set _verb HiFi list _devices' "$root/libexec/yogabook-validator-che
 	exit 1
 fi
 grep -Fq "Built-in Audio Stereo Speakers" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'ff.Replay(150, 0)' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'strong_magnitude=0x5000' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'restore_route || true' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq -- '--stream-to=/dev/null' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq 'src" / "yogabook-validator.sh"' "$root/ui/yogabook_validator_ui.py"

@@ -36,7 +36,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.2.0_all.deb
+sudo apt install ../yogabook-validator_0.3.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -45,6 +45,7 @@ Open **Yoga Book Validator** from the application menu, or run:
 yogabook-validator check
 yogabook-validator audio
 yogabook-validator camera
+yogabook-validator haptics
 yogabook-validator suspend 8
 yogabook-validator gnss
 yogabook-validator physical
@@ -78,7 +79,8 @@ or timeout. It never stores an image.
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, captures three frames from each sensor to `/dev/null`, and
-restores the original route. `suspend` keeps silent
+restores the original route. `haptics` plays one bounded 150 ms pulse on each
+actuator at moderate strength. `suspend` keeps silent
 full-duplex audio active across one suspend. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`
 compresses an existing report directory while excluding sensitive artifacts.

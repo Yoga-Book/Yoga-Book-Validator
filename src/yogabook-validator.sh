@@ -18,6 +18,7 @@ Commands:
   check                  Run the passive full-stack audit
   audio                  Run state-safe audio transport and signal tests
   camera                 Stream three frames from both cameras and restore route
+  haptics                Pulse both Halo haptic actuators for 150 ms
   suspend [SECONDS]      Run active audio across one suspend/resume cycle
   gnss [OPTIONS]         Inspect GNSS; optionally require sky or a fix
   physical               Record guided physical acceptance
@@ -38,7 +39,7 @@ case $command_name in
 check | camera | gnss | physical | full | bundle)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
-audio | suspend)
+audio | haptics | suspend)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then

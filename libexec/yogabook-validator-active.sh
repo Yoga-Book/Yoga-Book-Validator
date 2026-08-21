@@ -34,6 +34,8 @@ done
 case $action in
 audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
+haptics)
+	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
 suspend)
 	prompt="This test takes exclusive control of audio and suspends the tablet for ${suspend_seconds} seconds." ;;
 *) echo "ERROR: unsupported active test: $action" >&2; exit 2 ;;
@@ -47,10 +49,14 @@ if [[ $assume_yes != true ]]; then
 fi
 
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
-for required in alsactl alsaucm aplay arecord timeout python3; do
-	ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
-done
-[[ $action != suspend ]] || ybv_has_command rtcwake || { echo 'ERROR: missing command: rtcwake' >&2; exit 2; }
+if [[ $action == haptics ]]; then
+	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
+else
+	for required in alsactl alsaucm aplay arecord timeout python3; do
+		ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
+	done
+	[[ $action != suspend ]] || ybv_has_command rtcwake || { echo 'ERROR: missing command: rtcwake' >&2; exit 2; }
+fi
 
 real_user=$(ybv_real_user)
 if [[ $real_user == root || -z $real_user ]] || ! id "$real_user" >/dev/null 2>&1; then
@@ -71,6 +77,72 @@ if [[ -n $real_user ]]; then
 fi
 
 ybv_begin_report "$action" "$output_dir"
+if [[ $action == haptics ]]; then
+	run_haptic() {
+		local label=$1 path=$2 details
+		if details=$(python3 - "$path" 2>&1 <<'PY'
+import sys
+import time
+
+from evdev import InputDevice, ecodes, ff
+
+path = sys.argv[1]
+device = InputDevice(path)
+effect_id = None
+try:
+    capabilities = device.capabilities(verbose=False).get(ecodes.EV_FF, [])
+    if ecodes.FF_RUMBLE not in capabilities:
+        raise RuntimeError("FF_RUMBLE is unavailable")
+    effect = ff.Effect(
+        ecodes.FF_RUMBLE,
+        -1,
+        0,
+        ff.Trigger(0, 0),
+        ff.Replay(150, 0),
+        ff.EffectType(
+            ff_rumble_effect=ff.Rumble(
+                strong_magnitude=0x5000,
+                weak_magnitude=0,
+            )
+        ),
+    )
+    effect_id = device.upload_effect(effect)
+    device.write(ecodes.EV_FF, effect_id, 1)
+    time.sleep(0.25)
+    device.write(ecodes.EV_FF, effect_id, 0)
+    print(f"{device.name} at {path}; 150 ms, magnitude 0x5000")
+finally:
+    if effect_id is not None:
+        try:
+            device.write(ecodes.EV_FF, effect_id, 0)
+            device.erase_effect(effect_id)
+        except OSError:
+            pass
+    device.close()
+PY
+		); then
+			ybv_emit input "haptic-$label" PASS "$label Halo haptic actuator accepted a bounded force-feedback effect" "$details"
+		else
+			ybv_emit input "haptic-$label" FAIL "$label Halo haptic actuator test failed" "$details"
+		fi
+	}
+	for haptic in left right; do
+		device="/dev/${haptic}_vibrator"
+		if [[ -e $device ]]; then
+			run_haptic "$haptic" "$device"
+		else
+			ybv_emit input "haptic-$haptic" FAIL "$haptic Halo haptic device is missing" "$device"
+		fi
+		sleep 0.35
+	done
+	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
+		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
+	fi
+	YBV_PHYSICAL_RESULT=PENDING
+	ybv_finish_report
+	exit
+fi
+
 card_number=$(ybv_find_card_number || true)
 if [[ -z $card_number ]]; then
 	ybv_emit audio alsa-card FAIL 'ALSA card ID yogabook is missing'
