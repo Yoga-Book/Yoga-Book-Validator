@@ -4,11 +4,11 @@
 set -Eeuo pipefail
 
 LIBEXEC_DIR=${YBV_LIBEXEC_DIR:-/usr/libexec/yogabook-validator}
-if [[ ! -r $LIBEXEC_DIR/yogabook-validator-common ]]; then
+if [[ ! -r $LIBEXEC_DIR/yogabook-validator-common.sh ]]; then
 	LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../libexec" && pwd)
 fi
-# shellcheck source=../libexec/yogabook-validator-common
-. "$LIBEXEC_DIR/yogabook-validator-common"
+# shellcheck source=../libexec/yogabook-validator-common.sh
+. "$LIBEXEC_DIR/yogabook-validator-common.sh"
 
 usage() {
 	cat <<'EOF'
@@ -35,13 +35,13 @@ command_name=${1:-help}
 
 case $command_name in
 check | gnss | physical | full | bundle)
-	exec "$LIBEXEC_DIR/yogabook-validator-$command_name" "$@"
+	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 audio | suspend)
 	if [[ $EUID -eq 0 ]]; then
-		exec "$LIBEXEC_DIR/yogabook-validator-active" "$command_name" "$@"
+		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then
-		exec pkexec "$LIBEXEC_DIR/yogabook-validator-active" "$command_name" "$@"
+		exec pkexec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	else
 		echo "ERROR: $command_name requires root; install pkexec or run with sudo" >&2
 		exit 2
@@ -49,7 +49,7 @@ audio | suspend)
 	;;
 ui)
 	ui_command=/usr/bin/yogabook-validator-ui
-	[[ -x $ui_command ]] || ui_command=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/yogabook-validator-ui
+	[[ -x $ui_command ]] || ui_command=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/yogabook-validator-ui.sh
 	exec "$ui_command" "$@"
 	;;
 version | --version)

@@ -1,3 +1,11 @@
+yogabook-validator (0.1.1) unstable; urgency=medium
+
+  * Keep the passive audit from changing the active UCM verb.
+  * Wait for a usable PipeWire speaker sink after active tests.
+  * Give implementation files explicit language extensions.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 01:05:00 +0200
+
 yogabook-validator (0.1.0) unstable; urgency=medium
 
   * Initial CLI and GTK4/libadwaita validation suite for Yoga Book YB1-X91L.

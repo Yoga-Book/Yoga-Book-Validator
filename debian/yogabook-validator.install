@@ -1,5 +1,5 @@
-src/yogabook-validator usr/bin
-src/yogabook-validator-ui usr/bin
+src/yogabook-validator.sh usr/bin
+src/yogabook-validator-ui.sh usr/bin
 libexec/yogabook-validator-* usr/libexec/yogabook-validator
 ui/yogabook_validator_ui.py usr/lib/yogabook-validator
 data/org.yogabook.Validator.desktop usr/share/applications

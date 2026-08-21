@@ -3,8 +3,8 @@
 
 set -Eeuo pipefail
 LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=yogabook-validator-common
-. "$LIBEXEC_DIR/yogabook-validator-common"
+# shellcheck source=yogabook-validator-common.sh
+. "$LIBEXEC_DIR/yogabook-validator-common.sh"
 
 output_dir=
 while (($#)); do
@@ -96,7 +96,14 @@ else
 fi
 
 if [[ -n $card_number ]] && ybv_has_command alsaucm; then
-	ucm_devices=$(timeout 10 alsaucm -c hw:yogabook set _verb HiFi list _devices 2>&1 || true)
+	ucm_verbs=$(timeout 10 alsaucm -c hw:yogabook list _verbs 2>&1 || true)
+	if grep -Fq 'HiFi' <<<"$ucm_verbs"; then
+		ybv_emit audio ucm-import PASS 'Yoga Book UCM imports without changing the active verb' 'HiFi'
+	else
+		ybv_emit audio ucm-import FAIL 'Yoga Book UCM does not expose the HiFi verb' "$(head -n 1 <<<"$ucm_verbs")"
+	fi
+	ucm_directory=$(ybv_path /usr/share/alsa/ucm2/cht-yogabook)
+	ucm_devices=$(grep -Rh -E '^[[:space:]]*SectionDevice\."' "$ucm_directory" 2>/dev/null || true)
 	missing_ucm=()
 	for device in Speaker1 Headphones Mic1 Headset; do
 		grep -Fq "$device" <<<"$ucm_devices" || missing_ucm+=("$device")
@@ -106,7 +113,8 @@ if [[ -n $card_number ]] && ybv_has_command alsaucm; then
 	else
 		ybv_emit audio ucm-devices FAIL 'UCM device enumeration is incomplete' "missing: ${missing_ucm[*]}"
 	fi
-	printf '\n===== UCM devices =====\n%s\n' "$ucm_devices" >>"$YBV_LOG"
+	printf '\n===== UCM verbs =====\n%s\n===== UCM device declarations =====\n%s\n' \
+		"$ucm_verbs" "$ucm_devices" >>"$YBV_LOG"
 else
 	ybv_emit audio ucm-devices SKIP 'UCM enumeration is unavailable'
 fi

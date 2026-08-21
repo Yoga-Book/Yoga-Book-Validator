@@ -22,5 +22,5 @@ Related projects and upstream references:
 - https://gitlab.gnome.org/GNOME/mutter/-/work_items/4204
 - https://thesofproject.github.io/
 
-The project is licensed under GPL-2.0-or-later. Individual platform names and
-trademarks belong to their respective owners.
+The project is licensed under GPL-2.0-or-later; see `LICENSE`. Individual
+platform names and trademarks belong to their respective owners.

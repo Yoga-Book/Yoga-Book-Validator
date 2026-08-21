@@ -5,8 +5,8 @@ LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 output_base=${PWD}/yogabook-validator-results/full-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$output_base"
 check_rc=0
-"$LIBEXEC_DIR/yogabook-validator-check" --output "$output_base/check" || check_rc=$?
+"$LIBEXEC_DIR/yogabook-validator-check.sh" --output "$output_base/check" || check_rc=$?
 physical_rc=0
-"$LIBEXEC_DIR/yogabook-validator-physical" --output "$output_base/physical" "$@" || physical_rc=$?
+"$LIBEXEC_DIR/yogabook-validator-physical.sh" --output "$output_base/physical" "$@" || physical_rc=$?
 printf 'Full validation directory: %s\n' "$output_base"
 ((check_rc == 0 && physical_rc == 0))

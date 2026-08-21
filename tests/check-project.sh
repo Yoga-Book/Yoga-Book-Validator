@@ -9,21 +9,38 @@ trap cleanup EXIT
 
 required=(
 	README.md ATTRIBUTION.md CONTRIBUTING.md LICENSE Makefile
-	src/yogabook-validator src/yogabook-validator-ui
-	libexec/yogabook-validator-common libexec/yogabook-validator-check
-	libexec/yogabook-validator-active libexec/yogabook-validator-gnss
-	libexec/yogabook-validator-physical libexec/yogabook-validator-full
-	libexec/yogabook-validator-bundle ui/yogabook_validator_ui.py
+	src/yogabook-validator.sh src/yogabook-validator-ui.sh
+	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
+	libexec/yogabook-validator-active.sh libexec/yogabook-validator-gnss.sh
+	libexec/yogabook-validator-physical.sh libexec/yogabook-validator-full.sh
+	libexec/yogabook-validator-bundle.sh ui/yogabook_validator_ui.py
 	data/org.yogabook.Validator.desktop data/org.yogabook.validator.policy
 	data/metainfo/org.yogabook.Validator.metainfo.xml debian/control debian/rules
+	debian/yogabook-validator.links
 )
 for file in "${required[@]}"; do test -f "$root/$file"; done
 
-while IFS= read -r script; do bash -n "$script"; done < <(
-	printf '%s\n' "$root"/src/* "$root"/libexec/* "$root"/tests/*.sh "$root"/debian/tests/*
+while IFS= read -r script; do
+	test -x "$script"
+	bash -n "$script"
+done < <(
+	printf '%s\n' "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 )
+test -x "$root/ui/yogabook_validator_ui.py"
+
+shopt -s globstar nullglob
+for candidate in "$root"/src/** "$root"/libexec/** "$root"/ui/** \
+	"$root"/tests/** "$root"/debian/tests/** "$root"/debian/rules; do
+	[[ -f $candidate ]] || continue
+	IFS= read -r first_line <"$candidate" || true
+	[[ $first_line == '#!'* ]] || continue
+	case $candidate in
+	*.sh | *.py | "$root/debian/rules") ;;
+	*) echo "executable source lacks a meaningful extension: $candidate" >&2; exit 1 ;;
+	esac
+done
 if command -v shellcheck >/dev/null; then
-	shellcheck "$root"/src/* "$root"/libexec/* "$root"/tests/*.sh "$root"/debian/tests/*
+	shellcheck "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py"
 python3 - <<PY
@@ -41,17 +58,22 @@ if command -v appstreamcli >/dev/null; then
 	appstreamcli validate --no-net "$root/data/metainfo/org.yogabook.Validator.metainfo.xml"
 fi
 
-store_line=$(grep -n 'store yogabook' "$root/libexec/yogabook-validator-active" | head -n1 | cut -d: -f1)
-stop_line=$(grep -n 'systemctl --user stop' "$root/libexec/yogabook-validator-active" | head -n1 | cut -d: -f1)
+store_line=$(grep -n 'store yogabook' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
+stop_line=$(grep -n 'systemctl --user stop' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
 [[ -n $store_line && -n $stop_line && $store_line -lt $stop_line ]]
-grep -Fq "trap 'restore_state || true' EXIT INT TERM" "$root/libexec/yogabook-validator-active"
-grep -Fq "state-restore FAIL" "$root/libexec/yogabook-validator-active"
-grep -Fq "exclude='*.wav'" "$root/libexec/yogabook-validator-bundle"
+grep -Fq "trap 'restore_state || true' EXIT INT TERM" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "state-restore FAIL" "$root/libexec/yogabook-validator-active.sh"
+if grep -Fq 'set _verb HiFi list _devices' "$root/libexec/yogabook-validator-check.sh"; then
+	echo 'passive audit must not activate a UCM verb' >&2
+	exit 1
+fi
+grep -Fq "Built-in Audio Stereo Speakers" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "exclude='*.wav'" "$root/libexec/yogabook-validator-bundle.sh"
 
 answers="$temporary/answers.tsv"
 printf 'speakers\tPASS\ttest note\nheadphones\tSKIP\tno adapter\n' >"$answers"
 YBV_RESULTS_BASE="$temporary/results" YBV_LIBEXEC_DIR="$root/libexec" \
-	"$root/src/yogabook-validator" physical --answers "$answers" --output "$temporary/physical"
+	"$root/src/yogabook-validator.sh" physical --answers "$answers" --output "$temporary/physical"
 grep -Fq $'physical\tspeakers\tPASS' "$temporary/physical/results.tsv"
 grep -Fq 'PHYSICAL_ACCEPTANCE_RESULT: INCOMPLETE' "$temporary/physical/validator.log"
 
@@ -79,7 +101,7 @@ printf '42\n' >"$fake/sys/class/backlight/panel/brightness"
 printf '100\n' >"$fake/sys/class/backlight/panel/max_brightness"
 touch "$fake/dev/halo_keyboard" "$fake/dev/video0"
 YBV_SYSROOT="$fake" YBV_LIBEXEC_DIR="$root/libexec" \
-	"$root/src/yogabook-validator" check --output "$temporary/check" || true
+	"$root/src/yogabook-validator.sh" check --output "$temporary/check" || true
 grep -Fq $'platform\tdmi\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'audio\talsa-card\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'power\tbattery\tPASS' "$temporary/check/results.tsv"

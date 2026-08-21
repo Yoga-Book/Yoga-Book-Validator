@@ -3,8 +3,8 @@
 
 set -Eeuo pipefail
 LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=yogabook-validator-common
-. "$LIBEXEC_DIR/yogabook-validator-common"
+# shellcheck source=yogabook-validator-common.sh
+. "$LIBEXEC_DIR/yogabook-validator-common.sh"
 
 [[ $EUID -eq 0 ]] || { echo 'ERROR: active tests must run as root' >&2; exit 2; }
 action=${1:-}
@@ -84,6 +84,7 @@ services_stopped=false
 state_saved=false
 playback_pid=
 capture_pid=
+desktop_ready_seconds=
 
 restore_state() {
 	local pid restore_rc=0
@@ -98,6 +99,26 @@ restore_state() {
 	if [[ $services_stopped == true && -n $real_user ]]; then
 		ybv_run_as_user "$real_user" systemctl --user start pipewire.socket pipewire-pulse.socket >/dev/null 2>&1 || restore_rc=1
 		ybv_run_as_user "$real_user" systemctl --user start pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || restore_rc=1
+		if ybv_has_command wpctl; then
+			consecutive_ready=0
+			desktop_wait_started=$SECONDS
+			for _ in {1..30}; do
+				if ybv_run_as_user "$real_user" timeout 2 wpctl status 2>/dev/null |
+					grep -Fq 'Built-in Audio Stereo Speakers'; then
+					consecutive_ready=$((consecutive_ready + 1))
+					if ((consecutive_ready >= 3)); then
+						desktop_ready_seconds=$((SECONDS - desktop_wait_started))
+						break
+					fi
+				else
+					consecutive_ready=0
+				fi
+				sleep 1
+			done
+			[[ -n $desktop_ready_seconds ]] || restore_rc=1
+		else
+			restore_rc=1
+		fi
 	fi
 	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
 		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
@@ -224,7 +245,11 @@ fi
 if restore_state; then
 	state_saved=false
 	services_stopped=false
-	ybv_emit audio state-restore PASS 'Restored ALSA state and desktop audio services'
+	if [[ -n $real_user ]]; then
+		ybv_emit audio state-restore PASS 'Restored ALSA state and verified the desktop speaker sink' "ready after ${desktop_ready_seconds}s"
+	else
+		ybv_emit audio state-restore PASS 'Restored ALSA state; no desktop user services were managed'
+	fi
 else
 	ybv_emit audio state-restore FAIL 'ALSA state or desktop audio service restoration failed; EXIT trap will retry'
 fi

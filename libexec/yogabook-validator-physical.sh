@@ -3,8 +3,8 @@
 
 set -Eeuo pipefail
 LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=yogabook-validator-common
-. "$LIBEXEC_DIR/yogabook-validator-common"
+# shellcheck source=yogabook-validator-common.sh
+. "$LIBEXEC_DIR/yogabook-validator-common.sh"
 
 output_dir=
 answers_file=
