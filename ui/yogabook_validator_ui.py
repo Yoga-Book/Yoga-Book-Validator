@@ -94,6 +94,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
             ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
+            ("Test SD writes", "Write, verify, synchronize, and remove a bounded test file", self.on_storage_write, False),
             ("Inspect USB", "Validate xHCI hubs, role switch, modem transport, and attached accessories", self.on_usb, False),
             ("Test wireless", "Verify Wi-Fi gateway transport and briefly scan with Bluetooth", self.on_wireless, False),
             ("Test suspend", "Full-duplex audio across one suspend/resume cycle", self.on_suspend, False),
@@ -197,6 +198,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Test inserted SD card?",
             "The validator reads the first 4 MiB and mounts recognized filesystems read-only. It does not write to the card and removes every temporary mount.",
             lambda: self.run_command("storage", ["--yes"]),
+        )
+
+    def on_storage_write(self, _button) -> None:
+        self.confirm(
+            "Write-test the inserted SD card?",
+            "The validator creates one 64 KiB temporary file on each writable SD filesystem, verifies and synchronizes it, deletes it, and restores the original mount state. Existing read-only mounts are not changed. Administrator authorization is required.",
+            lambda: self.run_command("storage-write", ["--yes"]),
         )
 
     def on_inputs(self, _button) -> None:

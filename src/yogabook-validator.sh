@@ -28,6 +28,7 @@ Commands:
   power                  Validate battery, charger and desktop telemetry
   sensors                Sample every Yoga Book IIO sensor channel
   storage                Read the inserted SD card without writing to it
+  storage-write          Write/read/delete a bounded SD filesystem test file
   suspend [SECONDS]      Run active audio across one suspend/resume cycle
   usb                    Inspect USB hubs, role switch and device transport
   wireless               Test Wi-Fi gateway and bounded Bluetooth discovery
@@ -50,7 +51,7 @@ case $command_name in
 check | camera | display | gnss | physical | full | bundle | platform | power | sensors | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
-audio | automated | haptics | inputs | lights | modes | storage | suspend | wireless)
+audio | automated | haptics | inputs | lights | modes | storage | storage-write | suspend | wireless)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then

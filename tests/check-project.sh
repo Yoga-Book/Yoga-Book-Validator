@@ -159,6 +159,15 @@ grep -Fq "trap 'restore_lights || true' EXIT" "$root/libexec/yogabook-validator-
 grep -Fq "declare -A expected_counts=([als]=2 [accel_3d]=4 [hinge]=2 [sx9310]=1)" "$root/libexec/yogabook-validator-sensors.sh"
 grep -Fq 'mount_options=ro,nodev,nosuid,noexec' "$root/libexec/yogabook-validator-storage.sh"
 grep -Fq 'iflag=fullblock' "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq 'bs=64K count=1 conv=fsync' "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq '.yogabook-validator-write-test.XXXXXX' "$root/libexec/yogabook-validator-storage.sh"
+# shellcheck disable=SC2016
+grep -Fq 'sync -f "$mount_dir"' "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq 'storage-write' "$root/libexec/yogabook-validator-active.sh"
+if grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-automated.sh"; then
+	echo 'explicit SD write validation must not be part of automated' >&2
+	exit 1
+fi
 grep -Fq 'restore_wireless || true' "$root/libexec/yogabook-validator-wireless.sh"
 grep -Fq 'restore_route || true' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq -- '--stream-to=/dev/null' "$root/libexec/yogabook-validator-camera.sh"

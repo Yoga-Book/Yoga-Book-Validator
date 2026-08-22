@@ -45,7 +45,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.12.0_all.deb
+sudo apt install ../yogabook-validator_0.13.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -64,6 +64,7 @@ yogabook-validator platform
 yogabook-validator power
 yogabook-validator sensors
 yogabook-validator storage
+yogabook-validator storage-write
 yogabook-validator suspend 8
 yogabook-validator usb
 yogabook-validator wireless
@@ -146,6 +147,12 @@ bounded raw read and mounts recognized SD filesystems with read-only, nodev,
 nosuid and noexec options. It never writes to removable media and removes every
 temporary mount in its exit trap.
 
+The separate `storage-write` action is never included in `automated`. After
+explicit confirmation, it creates one generic 64 KiB test file on each
+writable SD filesystem, verifies and synchronizes the contents, removes the
+file, and restores the original mount state. It never logs removable-media
+identities and does not remount an existing read-only filesystem.
+
 ## Commands
 
 `automated` runs every non-suspend automated check and merges its reports.
@@ -158,9 +165,10 @@ GNOME Shell display stack without changing it. `haptics` plays one bounded 150 m
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `modes` observes one physical Halo keyboard to Wacom pen to
 Halo keyboard cycle and accepts `--timeout SECONDS`. `storage` validates an
-inserted SD card without writing. `platform` validates the SoC driver set, CPU
-power management,
-thermal stack, eMMC health, root filesystem and RTC wake capability. `power`
+inserted SD card without writing. `storage-write` performs the separately
+confirmed bounded SD write/read/delete check. `platform` validates the SoC
+driver set, CPU power management, thermal stack, eMMC health, root filesystem
+and RTC wake capability. `power`
 validates battery, charger and UPower telemetry. `sensors`
 samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control

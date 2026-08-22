@@ -1,3 +1,11 @@
+yogabook-validator (0.13.0) unstable; urgency=medium
+
+  * Add a separately confirmed bounded SD write/read/delete validation.
+  * Preserve existing mounts and restore temporary writable mounts on exit.
+  * Keep the default storage and automated-suite checks strictly read-only.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 04:36:00 +0200
+
 yogabook-validator (0.12.0) unstable; urgency=medium
 
   * Validate i915 DRM nodes and GNOME Shell hardware-rendering access.

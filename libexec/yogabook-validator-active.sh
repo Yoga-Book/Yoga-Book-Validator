@@ -60,6 +60,8 @@ modes)
 	prompt='This test observes one physical Halo keyboard to Wacom pen to Halo keyboard mode cycle. It does not read or record input events.' ;;
 storage)
 	prompt='This test reads the inserted SD card and mounts its filesystems read-only, then restores their original mount state.' ;;
+storage-write)
+	prompt='This test writes, verifies, synchronizes and deletes one 64 KiB temporary file on each writable SD filesystem, then restores its original mount state.' ;;
 suspend)
 	prompt="This test takes exclusive control of audio and suspends the tablet for ${suspend_seconds} seconds." ;;
 wireless)
@@ -77,7 +79,7 @@ fi
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 if [[ $action == haptics || $action == inputs || $action == modes ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
-elif [[ $action == automated || $action == lights || $action == storage || $action == wireless ]]; then
+elif [[ $action == automated || $action == lights || $action == storage || $action == storage-write || $action == wireless ]]; then
 	:
 else
 	for required in alsactl alsaucm aplay arecord timeout python3; do
@@ -114,9 +116,12 @@ if [[ $action == automated ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-automated.sh" "${automated_args[@]}"
 fi
 
-if [[ $action == inputs || $action == lights || $action == modes || $action == storage || $action == wireless ]]; then
+if [[ $action == inputs || $action == lights || $action == modes || $action == storage || $action == storage-write || $action == wireless ]]; then
 	active_args=(--output "$output_dir")
 	[[ $action == modes ]] && active_args+=(--timeout "$mode_timeout")
+	if [[ $action == storage-write ]]; then
+		exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-storage.sh" --write-test "${active_args[@]}"
+	fi
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-$action.sh" "${active_args[@]}"
 fi
 
