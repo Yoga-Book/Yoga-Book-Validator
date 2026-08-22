@@ -84,7 +84,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Run automated suite", "All transport checks except suspend, with one authorization", self.on_automated, True),
             ("Run passive audit", "Read-only checks; no administrator access", self.on_audit, False),
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
-            ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
+            ("Test cameras", "Analyze three in-memory frames from both sensors and restore the route", self.on_camera, False),
             ("Inspect display", "Validate i915, the DSI panel, Mutter layout, and desktop policy", self.on_display, False),
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
             ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
@@ -179,7 +179,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_camera(self, _button) -> None:
         self.confirm(
             "Test both cameras?",
-            "The validator briefly switches the AtomISP media route, captures three frames from each camera to /dev/null, and restores the original route. Images are not saved.",
+            "The validator briefly switches the AtomISP media route, checks three in-memory frames from each camera for complete, changing luminance data, discards them, and restores the original route. Images are never saved or logged.",
             lambda: self.run_command("camera", ["--yes"]),
         )
 

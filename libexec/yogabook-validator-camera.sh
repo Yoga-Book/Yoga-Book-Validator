@@ -19,13 +19,13 @@ done
 
 if [[ $assume_yes != true ]]; then
 	[[ -t 0 ]] || { echo 'ERROR: confirmation is required; use --yes after reviewing the operation' >&2; exit 2; }
-	printf '%s' 'This test briefly switches the AtomISP route, captures three frames from each camera to /dev/null, and restores the original route. Continue? [y/N] '
+	printf '%s' 'This test briefly switches the AtomISP route, analyzes three frames from each camera in memory without saving images, and restores the original route. Continue? [y/N] '
 	read -r answer
 	[[ $answer == y || $answer == Y || $answer == yes || $answer == YES ]] || exit 2
 fi
 
 ybv_require_x91l || { echo 'ERROR: camera tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
-for required in media-ctl timeout v4l2-ctl; do
+for required in media-ctl python3 v4l2-ctl; do
 	ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
 done
 
@@ -99,7 +99,8 @@ select_route() {
 }
 
 test_camera() {
-	local id=$1 label=$2 port=$3 expected=$4 input
+	local id=$1 label=$2 port=$3 expected=$4 input format width height stride frame_size
+	local capture_result stream_status signal_status stream_details signal_details
 	if ! select_route "$port"; then
 		ybv_emit camera "$id-route" FAIL "Could not select the $label route"
 		return
@@ -110,12 +111,28 @@ test_camera() {
 	else
 		ybv_emit camera "$id-route" FAIL "$label route did not select $expected" "$input"
 	fi
-	if timeout 20 v4l2-ctl -d "$video_device" --stream-mmap=3 --stream-count=3 \
-		--stream-to=/dev/null >>"$YBV_LOG" 2>&1; then
-		ybv_emit camera "$id-stream" PASS "$label delivered three frames"
-	else
-		ybv_emit camera "$id-stream" FAIL "$label frame capture failed"
+	format=$(v4l2-ctl -d "$video_device" --get-fmt-video 2>>"$YBV_LOG" || true)
+	read -r width height < <(sed -n 's/^[[:space:]]*Width\/Height[[:space:]]*:[[:space:]]*\([0-9][0-9]*\)\/\([0-9][0-9]*\).*/\1 \2/p' <<<"$format") || true
+	stride=$(sed -n 's/^[[:space:]]*Bytes per Line[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$format")
+	frame_size=$(sed -n 's/^[[:space:]]*Size Image[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$format")
+	if [[ -z $width || -z $height || -z $stride || -z $frame_size ]]; then
+		ybv_emit camera "$id-stream" FAIL "$label capture geometry is unavailable"
+		ybv_emit camera "$id-signal" SKIP "$label signal integrity was not analyzed"
+		return
 	fi
+	capture_result=$(python3 "$LIBEXEC_DIR/yogabook-validator-camera-capture.py" \
+		"$video_device" "$width" "$height" "$stride" "$frame_size" 3 2>>"$YBV_LOG" || true)
+	IFS=$'\t' read -r stream_status signal_status stream_details signal_details <<<"$capture_result"
+	case $stream_status in
+	PASS) ybv_emit camera "$id-stream" PASS "$label delivered three complete frames" "$stream_details" ;;
+	*) ybv_emit camera "$id-stream" FAIL "$label frame capture failed" "${stream_details:-analyzer produced no result}" ;;
+	esac
+	case $signal_status in
+	PASS) ybv_emit camera "$id-signal" PASS "$label frames contain changing luminance data" "$signal_details" ;;
+	WARN) ybv_emit camera "$id-signal" WARN "$label frames may be dark or unusually flat" "$signal_details" ;;
+	SKIP) ybv_emit camera "$id-signal" SKIP "$label signal integrity was not analyzed" "$signal_details" ;;
+	*) ybv_emit camera "$id-signal" FAIL "$label frames are frozen or invalid" "${signal_details:-analyzer produced no result}" ;;
+	esac
 }
 
 test_camera front 'Front camera' 0 ov2740

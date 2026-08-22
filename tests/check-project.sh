@@ -13,6 +13,7 @@ required=(
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
 	libexec/yogabook-validator-active.sh libexec/yogabook-validator-automated.sh
 	libexec/yogabook-validator-camera.sh
+	libexec/yogabook-validator-camera-capture.py
 	libexec/yogabook-validator-display.sh
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
@@ -184,7 +185,24 @@ if grep -Fq 'discovery_output" >>"$YBV_LOG"' "$root/libexec/yogabook-validator-w
 	exit 1
 fi
 grep -Fq 'restore_route || true' "$root/libexec/yogabook-validator-camera.sh"
-grep -Fq -- '--stream-to=/dev/null' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'yogabook-validator-camera-capture.py' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq -- '--stream-to=-' "$root/libexec/yogabook-validator-camera-capture.py"
+grep -Fq 'actual_frame_bytes=' "$root/libexec/yogabook-validator-camera-capture.py"
+if grep -Eq -- '--stream-to=[^ -]|open\(.+wb|write_bytes' "$root/libexec/yogabook-validator-camera-capture.py"; then
+	echo 'camera validation must never store captured image data' >&2
+	exit 1
+fi
+camera_analysis=$(python3 -c 'import sys
+for offset in (0, 1, 2):
+    sys.stdout.buffer.write(bytes((16 + offset, 48 + offset, 96 + offset, 192 + offset, 32 + offset, 64 + offset, 128 + offset, 224 + offset, 128, 128, 128, 128)))' |
+	python3 "$root/libexec/yogabook-validator-camera-capture.py" --analyze-stdin 4 2 4 12 3)
+[[ $camera_analysis == PASS$'\t'PASS$'\t'* ]]
+frozen_analysis=$(python3 -c 'import sys; sys.stdout.buffer.write(bytes((16, 48, 96, 192, 32, 64, 128, 224, 128, 128, 128, 128)) * 3)' |
+	python3 "$root/libexec/yogabook-validator-camera-capture.py" --analyze-stdin 4 2 4 12 3)
+[[ $frozen_analysis == PASS$'\t'FAIL$'\t'* ]]
+incomplete_analysis=$(python3 -c 'import sys; sys.stdout.buffer.write(bytes(12))' |
+	python3 "$root/libexec/yogabook-validator-camera-capture.py" --analyze-stdin 4 2 4 12 3)
+[[ $incomplete_analysis == FAIL$'\t'SKIP$'\t'* ]]
 grep -Fq 'src" / "yogabook-validator.sh"' "$root/ui/yogabook_validator_ui.py"
 grep -Fq "exclude='*.wav'" "$root/libexec/yogabook-validator-bundle.sh"
 

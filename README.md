@@ -93,9 +93,11 @@ matrix playback uses digital silence. Report bundles exclude WAV recordings
 and ALSA state snapshots because they may contain personal or machine-specific
 data.
 
-The camera test records which AtomISP sensor links were active, streams only to
-`/dev/null`, and restores the original links on success, failure, interruption,
-or timeout. It never stores an image.
+The camera test records which AtomISP sensor links were active, captures three
+frames from each sensor into bounded process memory, checks complete payloads,
+luminance variation and frame-to-frame change, then immediately discards the
+bytes. It restores the original links on success, failure, interruption, or
+timeout and never stores or logs an image.
 
 The sensor test reads every raw ALS, accelerometer, hinge-angle and proximity
 channel and confirms that SensorProxy returns live desktop values. The lights
@@ -161,8 +163,9 @@ identities and does not remount an existing read-only filesystem.
 `check` performs the read-only full-stack audit. `audio` tests PCM0 playback and
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
-AtomISP media route, captures three frames from each sensor to `/dev/null`, and
-restores the original route. `display` inspects the live i915, DSI, Mutter and
+AtomISP media route, validates three in-memory frames from each sensor for
+payload and signal integrity, discards them and restores the original route.
+`display` inspects the live i915, DSI, Mutter and
 GNOME Shell display stack without changing it. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `modes` observes one physical Halo keyboard to Wacom pen to
