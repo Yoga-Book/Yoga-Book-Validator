@@ -13,6 +13,11 @@ LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 output_dir=
 transition_timeout=90
+stable_samples=10
+stable_interval=0.2
+all_orientations=false
+transition_trace_pid=
+transition_trace_stop_file=
 while (($#)); do
 	case $1 in
 	--output)
@@ -24,6 +29,10 @@ while (($#)); do
 		[[ $# -ge 2 ]] || { echo 'ERROR: --timeout requires a value' >&2; exit 2; }
 		transition_timeout=$2
 		shift 2
+		;;
+	--all-orientations)
+		all_orientations=true
+		shift
 		;;
 	*)
 		echo "ERROR: unknown option: $1" >&2
@@ -46,7 +55,9 @@ if [[ -z $real_user || $real_user == root ]] || ! id "$real_user" >/dev/null 2>&
 	exit 2
 fi
 
-ybv_begin_report modes "$output_dir"
+report_name=modes
+[[ $all_orientations == false ]] || report_name=rotation
+ybv_begin_report "$report_name" "$output_dir"
 
 finish_modes() {
 	local finish_rc=0
@@ -54,6 +65,25 @@ finish_modes() {
 	ybv_finish_report_for_user "$real_user" || finish_rc=$?
 	return "$finish_rc"
 }
+
+stop_transition_trace() {
+	if [[ -n ${transition_trace_pid:-} ]]; then
+		[[ -n ${transition_trace_stop_file:-} ]] && touch "$transition_trace_stop_file"
+		for _attempt in {1..50}; do
+			kill -0 "$transition_trace_pid" 2>/dev/null || break
+			sleep 0.1
+		done
+		kill "$transition_trace_pid" 2>/dev/null || true
+		wait "$transition_trace_pid" 2>/dev/null || true
+		transition_trace_pid=
+	fi
+	if [[ -n ${transition_trace_stop_file:-} ]]; then
+		rm -f -- "$transition_trace_stop_file"
+		transition_trace_stop_file=
+	fi
+}
+
+trap 'stop_transition_trace' EXIT INT TERM
 
 find_input_node() {
 	local wanted=$1
@@ -82,6 +112,37 @@ input_present() {
 	find_input_node "$1" >/dev/null 2>&1
 }
 
+find_pen_node() {
+	python3 - <<'PY'
+import glob
+
+from evdev import InputDevice, ecodes
+
+fallback = None
+required_absolute = {ecodes.ABS_X, ecodes.ABS_Y, ecodes.ABS_PRESSURE}
+required_keys = {ecodes.BTN_TOOL_PEN, ecodes.BTN_TOUCH}
+for path in sorted(glob.glob("/dev/input/event*")):
+    try:
+        device = InputDevice(path)
+        name = device.name
+        capabilities = device.capabilities(absinfo=False)
+        device.close()
+    except OSError:
+        continue
+    if name != "Wacom HID 169 Pen":
+        continue
+    fallback = fallback or path
+    if (required_absolute <= set(capabilities.get(ecodes.EV_ABS, [])) and
+            required_keys <= set(capabilities.get(ecodes.EV_KEY, []))):
+        print(path)
+        raise SystemExit(0)
+if fallback:
+    print(fallback)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 halo_ready() {
 	systemctl is-active --quiet halo-keyboard.service &&
 		[[ -e /dev/halo_keyboard ]] &&
@@ -103,12 +164,17 @@ action_required() {
 }
 
 wait_for_pen() {
-	local deadline=$((SECONDS + transition_timeout))
+	local deadline=$((SECONDS + transition_timeout)) consecutive=0
 	while ((SECONDS < deadline)); do
 		if input_present 'Wacom HID 169 Pen'; then
-			return 0
+			((++consecutive))
+			if ((consecutive >= stable_samples)); then
+				return 0
+			fi
+		else
+			consecutive=0
 		fi
-		sleep 1
+		sleep "$stable_interval"
 	done
 	return 1
 }
@@ -125,13 +191,152 @@ scan_transition_journal() {
 }
 
 wait_for_keyboard() {
-	local deadline=$((SECONDS + transition_timeout))
+	local deadline=$((SECONDS + transition_timeout)) consecutive=0
 	while ((SECONDS < deadline)); do
 		if ! input_present 'Wacom HID 169 Pen' && halo_ready; then
-			return 0
+			((++consecutive))
+			if ((consecutive >= stable_samples)); then
+				return 0
+			fi
+		else
+			consecutive=0
 		fi
-		sleep 1
+		sleep "$stable_interval"
 	done
+	return 1
+}
+
+start_transition_trace() {
+	local trace_file="$YBV_REPORT_DIR/mode-transition.tsv"
+	transition_trace_stop_file="$YBV_REPORT_DIR/.mode-transition.stop"
+	rm -f -- "$transition_trace_stop_file"
+	touch "$trace_file"
+	chown -- "$real_user:$(id -gn "$real_user")" "$trace_file"
+	ybv_run_as_user "$real_user" \
+		"$LIBEXEC_DIR/yogabook-validator-mode-trace.py" \
+		--output "$trace_file" --interval 0.1 \
+		--stop-file "$transition_trace_stop_file" >>"$YBV_LOG" 2>&1 &
+	transition_trace_pid=$!
+	for _attempt in {1..20}; do
+		[[ $(wc -l <"$trace_file") -ge 2 ]] && return 0
+		kill -0 "$transition_trace_pid" 2>/dev/null || return 1
+		sleep 0.1
+	done
+	return 1
+}
+
+check_halo_landscape() {
+	local check_id=$1 timing=$2 display_state=$3 status
+	if [[ $display_state == *'connector=DSI-1 mode=1920x1200@'* &&
+		$display_state == *' transform=0 '* ]]; then
+		ybv_emit display "$check_id" PASS \
+			"Mutter uses the upright landscape transform $timing" "$display_state"
+	else
+		status=FAIL
+		[[ $timing == 'at the start' ]] && status=WARN
+		ybv_emit display "$check_id" "$status" \
+			"Mutter does not use the upright landscape transform $timing" \
+			"actual=${display_state:-unavailable}; expected=DSI-1 1920x1200 transform=0"
+	fi
+}
+
+expected_transform_for_sensor() {
+	case $1 in
+	normal) printf '1\n' ;;
+	right-up) printf '0\n' ;;
+	bottom-up) printf '3\n' ;;
+	left-up) printf '2\n' ;;
+	*) return 1 ;;
+	esac
+}
+
+sensor_transform_matches() {
+	local display_state=$1 trace_file="$YBV_REPORT_DIR/mode-transition.tsv"
+	local sensor actual expected
+	sensor=$(tail -n 1 "$trace_file" | cut -f3)
+	actual=$(sed -n 's/.* transform=\([0-9][0-9]*\).*/\1/p' <<<"$display_state")
+	if ! expected=$(expected_transform_for_sensor "$sensor"); then
+		ybv_emit display mutter-pen-orientation WARN \
+			'Could not correlate Mutter with SensorProxy in pen mode' \
+			"sensor=${sensor:-unavailable}; display=$display_state"
+		return
+	fi
+	if [[ $actual == "$expected" ]]; then
+		ybv_emit display mutter-pen-orientation PASS \
+			'Mutter pen-mode transform matches the stable physical orientation' \
+			"sensor=$sensor transform=$actual"
+	else
+		ybv_emit display mutter-pen-orientation FAIL \
+			'Mutter pen-mode transform does not match the stable physical orientation' \
+			"sensor=$sensor expected-transform=$expected actual-transform=${actual:-unavailable}"
+	fi
+}
+
+exercise_all_orientations() {
+	local trace_file="$YBV_REPORT_DIR/mode-transition.tsv"
+	local deadline=$((SECONDS + transition_timeout)) line timestamp monotonic sensor
+	local connector mode transform expected pair last_pair= last_monotonic= consecutive=0
+	local completed=false missing
+	local -a orientations=(right-up normal bottom-up left-up)
+	declare -A observed=()
+
+	action_required "Rotate the tablet slowly through both portrait orientations and upside-down landscape, then return to upright landscape within ${transition_timeout} seconds."
+	while ((SECONDS < deadline)); do
+		line=$(tail -n 1 "$trace_file")
+		IFS=$'\t' read -r timestamp monotonic sensor connector mode transform _rest <<<"$line"
+		if [[ -z $monotonic || $monotonic == "$last_monotonic" ]]; then
+			sleep 0.1
+			continue
+		fi
+		last_monotonic=$monotonic
+		if expected=$(expected_transform_for_sensor "$sensor") &&
+			[[ $connector == DSI-1 && $mode == 1920x1200@* && $transform == "$expected" ]]; then
+			pair="$sensor:$transform"
+			if [[ $pair == "$last_pair" ]]; then
+				((++consecutive))
+			else
+				last_pair=$pair
+				consecutive=1
+			fi
+			if ((consecutive >= stable_samples)) && [[ -z ${observed[$sensor]:-} ]]; then
+				observed[$sensor]=$transform
+				action_required "Detected stable $sensor orientation; continue through the remaining orientations and finish upright."
+			fi
+			if ((${#observed[@]} == ${#orientations[@]})) &&
+				[[ $sensor == right-up && $transform == 0 ]]; then
+				completed=true
+				break
+			fi
+		else
+			last_pair=
+			consecutive=0
+		fi
+		sleep 0.1
+	done
+
+	missing=()
+	for sensor in "${orientations[@]}"; do
+		expected=$(expected_transform_for_sensor "$sensor")
+		if [[ ${observed[$sensor]:-} == "$expected" ]]; then
+			ybv_emit display "rotation-$sensor" PASS \
+				"SensorProxy and Mutter reached a stable $sensor orientation" \
+				"sensor=$sensor transform=$expected"
+		else
+			missing+=("$sensor:$expected")
+			ybv_emit display "rotation-$sensor" FAIL \
+				"SensorProxy and Mutter did not reach a stable $sensor orientation" \
+				"expected-transform=$expected"
+		fi
+	done
+	if [[ $completed == true ]]; then
+		ybv_emit display rotation-upright-return PASS \
+			'Automatic rotation returned to upright landscape' \
+			'sensor=right-up transform=0'
+		return 0
+	fi
+	ybv_emit display rotation-upright-return FAIL \
+		'Automatic rotation did not complete all orientations and return upright' \
+		"missing=${missing[*]:-upright-return}"
 	return 1
 }
 
@@ -165,7 +370,7 @@ for device in 'Halo Keyboard' 'Halo Keyboard Touchpad'; do
 		ybv_emit input "$check_id-start" FAIL "$device is missing at the start"
 	fi
 done
-if input_present 'Goodix Capacitive TouchScreen'; then
+if input_present 'HDP0001:00 2ABB:8102'; then
 	ybv_emit input touchscreen-start PASS 'Display touchscreen is present at the start'
 else
 	ybv_emit input touchscreen-start FAIL 'Display touchscreen is missing at the start'
@@ -179,6 +384,7 @@ fi
 baseline_display=$(ybv_mutter_state "$real_user" 2>>"$YBV_LOG" || true)
 if [[ -n $baseline_display ]]; then
 	ybv_emit display mutter-start PASS 'Captured the initial Mutter logical display state' "$baseline_display"
+	check_halo_landscape halo-landscape-start 'at the start' "$baseline_display"
 else
 	ybv_emit display mutter-start FAIL 'Could not capture the initial Mutter logical display state'
 fi
@@ -197,10 +403,18 @@ if ((YBV_FAILURES > 0)); then
 fi
 
 transition_started=$(date --iso-8601=seconds)
+if start_transition_trace; then
+	ybv_emit display transition-trace PASS 'Started synchronized mode-transition tracing' 'mode-transition.tsv; interval=100ms'
+else
+	ybv_emit display transition-trace FAIL 'Could not start synchronized mode-transition tracing'
+	finish_rc=0
+	finish_modes || finish_rc=$?
+	exit "$finish_rc"
+fi
 action_required "Switch the Yoga Book from Halo keyboard mode to drawing/pen mode within ${transition_timeout} seconds."
 if wait_for_pen; then
-	pen_node=$(find_input_node 'Wacom HID 169 Pen')
-	ybv_emit input pen-appeared PASS 'Wacom pen appeared after the physical mode switch'
+	pen_node=$(find_pen_node)
+	ybv_emit input pen-appeared PASS 'Wacom pen remained present for two seconds after the physical mode switch'
 else
 	ybv_emit input pen-appeared FAIL "Wacom pen did not appear within ${transition_timeout} seconds"
 	scan_transition_journal
@@ -226,7 +440,11 @@ required_keys = {ecodes.BTN_TOOL_PEN, ecodes.BTN_TOUCH}
 missing = [ecodes.bytype[ecodes.EV_ABS].get(code, str(code)) for code in sorted(required_absolute - absolute)]
 missing += [ecodes.bytype[ecodes.EV_KEY].get(code, str(code)) for code in sorted(required_keys - keys)]
 if missing:
-    raise RuntimeError("missing capabilities: " + ", ".join(missing))
+    def capability_name(value):
+        if isinstance(value, (tuple, list)):
+            return "/".join(str(alias) for alias in value)
+        return str(value)
+    raise RuntimeError("missing capabilities: " + ", ".join(map(capability_name, missing)))
 print("position=ABS_X+ABS_Y pressure=ABS_PRESSURE tool=BTN_TOOL_PEN touch=BTN_TOUCH")
 PY
 ); then
@@ -244,19 +462,22 @@ if [[ $calibration == '0 1 0 -1 0 1' ]]; then
 else
 	ybv_emit input pen-calibration FAIL 'Wacom pen calibration matrix is missing or incorrect' "actual=${calibration:-unset}; expected=0 1 0 -1 0 1"
 fi
-if input_present 'Goodix Capacitive TouchScreen'; then
+if input_present 'HDP0001:00 2ABB:8102'; then
 	ybv_emit input touchscreen-pen-mode PASS 'Display touchscreen remains present in pen mode'
 else
 	ybv_emit input touchscreen-pen-mode FAIL 'Display touchscreen disappeared in pen mode'
 fi
 pen_display=$(ybv_mutter_state "$real_user" 2>>"$YBV_LOG" || true)
-compare_state mutter-pen-mode 'Mutter logical display state in pen mode' "$baseline_display" "$pen_display"
+sensor_transform_matches "$pen_display"
 pen_settings=$(desktop_settings 2>>"$YBV_LOG" || true)
 compare_state settings-pen-mode 'GNOME orientation-lock and onscreen-keyboard settings in pen mode' "$baseline_settings" "$pen_settings"
+if [[ $all_orientations == true ]]; then
+	exercise_all_orientations || true
+fi
 
 action_required "Switch the Yoga Book back to Halo keyboard mode within ${transition_timeout} seconds."
 if wait_for_keyboard; then
-	ybv_emit input keyboard-returned PASS 'Halo keyboard service and virtual devices returned after the physical mode switch'
+	ybv_emit input keyboard-returned PASS 'Halo keyboard state remained complete for two seconds after the physical mode switch'
 else
 	ybv_emit input keyboard-returned FAIL "Halo keyboard mode was not ready within ${transition_timeout} seconds"
 fi
@@ -291,16 +512,23 @@ for device in 'Halo Keyboard' 'Halo Keyboard Touchpad'; do
 		ybv_emit input "$check_id-restored" FAIL "$device is missing after the mode cycle"
 	fi
 done
-if input_present 'Goodix Capacitive TouchScreen'; then
+if input_present 'HDP0001:00 2ABB:8102'; then
 	ybv_emit input touchscreen-restored PASS 'Display touchscreen remains present after the mode cycle'
 else
 	ybv_emit input touchscreen-restored FAIL 'Display touchscreen is missing after the mode cycle'
 fi
 final_display=$(ybv_mutter_state "$real_user" 2>>"$YBV_LOG" || true)
-compare_state mutter-restored 'Mutter logical display state after the mode cycle' "$baseline_display" "$final_display"
+check_halo_landscape halo-landscape-restored 'after the mode cycle' "$final_display"
 final_settings=$(desktop_settings 2>>"$YBV_LOG" || true)
 compare_state settings-restored 'GNOME orientation-lock and onscreen-keyboard settings after the mode cycle' "$baseline_settings" "$final_settings"
 
+stop_transition_trace
+trace_samples=$(($(wc -l <"$YBV_REPORT_DIR/mode-transition.tsv") - 1))
+if ((trace_samples > 0)); then
+	ybv_emit display transition-trace-complete PASS 'Captured synchronized SensorProxy, Mutter and input-mode samples' "samples=$trace_samples; mode-transition.tsv"
+else
+	ybv_emit display transition-trace-complete FAIL 'The synchronized mode-transition trace is empty'
+fi
 scan_transition_journal
 
 finish_rc=0

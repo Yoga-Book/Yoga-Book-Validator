@@ -46,7 +46,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.17.0_all.deb
+sudo apt install ../yogabook-validator_0.20.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -61,6 +61,7 @@ yogabook-validator haptics
 yogabook-validator inputs
 yogabook-validator lights
 yogabook-validator modes
+yogabook-validator rotation
 yogabook-validator platform
 yogabook-validator power
 yogabook-validator sensors
@@ -84,13 +85,16 @@ authorization. The passive audit needs neither.
 
 The audio and suspend helper is restricted to YB1-X91L by DMI. Before stopping
 WirePlumber it snapshots the live ALSA state. It restores that state and starts
-the user's PipeWire services on success, failure, interruption, or timeout.
+the user's complete PipeWire, Pulse and WirePlumber graph on success, failure,
+interruption, or timeout.
 Saving before WirePlumber stops is essential: closing the UCM session can
 temporarily disable `Speaker Switch`, and persisting that transient state would
 leave the tablet silent.
 
 The tone is a bounded one-second 440 Hz WAV at 8% digital amplitude. Transport
-matrix playback uses digital silence. Report bundles exclude WAV recordings
+matrix playback uses digital silence. Suspend validation also disables the
+physical speaker route while its direct stream crosses sleep, then restores
+the saved mixer state. Report bundles exclude WAV recordings
 and ALSA state snapshots because they may contain personal or machine-specific
 data.
 
@@ -115,8 +119,17 @@ switch physically to drawing/pen mode and back. It verifies Wacom position,
 pressure, tool and touch capabilities, the libinput calibration matrix, Halo
 service recovery, display touchscreen presence, Mutter logical display state,
 GNOME orientation-lock and onscreen-keyboard settings, and transition-time
-kernel errors. It never reads keys, touches or pen strokes. Because this test
+kernel errors. Mode entry and return must remain stable for two seconds before
+they are accepted. A 100 ms synchronized trace records SensorProxy orientation,
+Mutter transform, Halo service/devices and Wacom presence in
+`mode-transition.tsv`; it never reads keys, touches or pen strokes. Because this test
 requires physical action, it is intentionally excluded from `automated`.
+
+The automatic-rotation test extends the same state-safe mode cycle. In pen
+mode it asks the user to rotate the tablet through all four cardinal
+orientations and return it upright. Each SensorProxy orientation must remain
+stable with the corresponding Mutter transform before it is accepted. The
+test observes and reports desktop policy; it never applies a display transform.
 
 The display test is passive. It validates the i915 DRM card and render node,
 the native DSI panel, GNOME Shell's live GPU file descriptors, Mutter's
@@ -172,7 +185,9 @@ the frames and restores the original focus and route.
 GNOME Shell display stack without changing it. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `modes` observes one physical Halo keyboard to Wacom pen to
-Halo keyboard cycle and accepts `--timeout SECONDS`. `storage` validates an
+Halo keyboard cycle and accepts `--timeout SECONDS`. `rotation` extends that
+cycle and requires all four sensor orientations to match stable Mutter
+transforms before returning upright. `storage` validates an
 inserted SD card without writing. `storage-write` performs the separately
 confirmed bounded SD write/read/delete check. `platform` validates the SoC
 driver set, CPU power management, thermal stack, eMMC health, root filesystem
@@ -183,8 +198,8 @@ exercises and restores the display, Halo, indicator and charging light control
 paths. `usb` audits the host hubs, role switch, fixed modem path, attached
 accessories and targeted kernel errors. `wireless` checks the current Wi-Fi
 gateway, Bluetooth controller features and bounded RF discovery while
-restoring radio state. `suspend` keeps silent
-full-duplex audio active across one suspend. `gnss` accepts `--require-sky` or
+restoring radio state. `suspend` keeps hardware-muted full-duplex audio active
+across one suspend and reports any recovered ALSA xruns. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`
 compresses an existing report directory while excluding sensitive artifacts.
 

@@ -29,7 +29,7 @@ while (($#)); do
 		[[ $# -ge 2 ]] || { echo 'ERROR: --seconds requires a value' >&2; exit 2; }
 		suspend_seconds=$2; shift 2 ;;
 	--timeout)
-		[[ $action == modes ]] || { echo 'ERROR: --timeout is valid only for modes' >&2; exit 2; }
+		[[ $action == modes || $action == rotation ]] || { echo 'ERROR: --timeout is valid only for modes or rotation' >&2; exit 2; }
 		[[ $# -ge 2 ]] || { echo 'ERROR: --timeout requires a value' >&2; exit 2; }
 		mode_timeout=$2; shift 2 ;;
 	*)
@@ -58,6 +58,8 @@ lights)
 	prompt='This test makes one-step changes to panel and platform light brightness, then restores every brightness and trigger value.' ;;
 modes)
 	prompt='This test observes one physical Halo keyboard to Wacom pen to Halo keyboard mode cycle. It does not read or record input events.' ;;
+rotation)
+	prompt='This test observes a Halo-to-pen mode cycle while you rotate the tablet through all four cardinal orientations and return it upright. It does not change display policy or read input events.' ;;
 storage)
 	prompt='This test reads the inserted SD card and mounts its filesystems read-only, then restores their original mount state.' ;;
 storage-write)
@@ -77,12 +79,12 @@ if [[ $assume_yes != true ]]; then
 fi
 
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
-if [[ $action == haptics || $action == inputs || $action == modes ]]; then
+if [[ $action == haptics || $action == inputs || $action == modes || $action == rotation ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
 elif [[ $action == automated || $action == lights || $action == storage || $action == storage-write || $action == wireless ]]; then
 	:
 else
-	for required in alsactl alsaucm aplay arecord timeout python3; do
+	for required in alsactl alsaucm aplay arecord pactl parec pw-play wpctl systemctl timeout python3; do
 		ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
 	done
 	[[ $action != suspend ]] || ybv_has_command rtcwake || { echo 'ERROR: missing command: rtcwake' >&2; exit 2; }
@@ -116,9 +118,12 @@ if [[ $action == automated ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-automated.sh" "${automated_args[@]}"
 fi
 
-if [[ $action == inputs || $action == lights || $action == modes || $action == storage || $action == storage-write || $action == wireless ]]; then
+if [[ $action == inputs || $action == lights || $action == modes || $action == rotation || $action == storage || $action == storage-write || $action == wireless ]]; then
 	active_args=(--output "$output_dir")
-	[[ $action == modes ]] && active_args+=(--timeout "$mode_timeout")
+	[[ $action == modes || $action == rotation ]] && active_args+=(--timeout "$mode_timeout")
+	if [[ $action == rotation ]]; then
+		exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-modes.sh" --all-orientations "${active_args[@]}"
+	fi
 	if [[ $action == storage-write ]]; then
 		exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-storage.sh" --write-test "${active_args[@]}"
 	fi
@@ -209,14 +214,70 @@ fi
 
 state_file="$YBV_REPORT_DIR/alsa-state"
 capture_file="$YBV_REPORT_DIR/mic1.wav"
+tone_file="$YBV_REPORT_DIR/tone.wav"
+desktop_probe_file="$YBV_REPORT_DIR/desktop-monitor.raw"
 wireplumber_stopped=false
 state_saved=false
 playback_pid=
 capture_pid=
 desktop_ready_seconds=
+desktop_recovery_used=false
+playback_log="$YBV_REPORT_DIR/suspend-playback.log"
+capture_log="$YBV_REPORT_DIR/suspend-capture.log"
+
+python3 - "$tone_file" <<'PY'
+import math, struct, sys, wave
+rate = 48000
+with wave.open(sys.argv[1], "wb") as wav:
+    wav.setparams((2, 2, rate, rate, "NONE", "not compressed"))
+    for i in range(rate):
+        value = int(0.08 * 32767 * math.sin(2 * math.pi * 440 * i / rate))
+        wav.writeframesraw(struct.pack("<hh", value, value))
+PY
+
+desktop_audio_probe() {
+	local monitor_pid playback_probe_pid playback_rc=0 monitor_rc=0
+	local default_sink= sink_running=false pcm_running=false signal=
+
+	: >"$desktop_probe_file"
+	default_sink=$(ybv_run_as_user "$real_user" timeout 3 pactl get-default-sink 2>/dev/null) || return 1
+	ybv_run_as_user "$real_user" timeout 5 parec --device="${default_sink}.monitor" \
+		--format=s16le --rate=48000 --channels=2 --raw >"$desktop_probe_file" 2>>"$YBV_LOG" &
+	monitor_pid=$!
+	sleep 0.5
+	ybv_run_as_user "$real_user" timeout 5 pw-play "$tone_file" >>"$YBV_LOG" 2>&1 &
+	playback_probe_pid=$!
+	for _ in {1..20}; do
+		if ybv_run_as_user "$real_user" timeout 2 pactl list sinks short 2>/dev/null |
+			awk -v sink="$default_sink" '$2 == sink && $NF == "RUNNING" { found=1 } END { exit !found }'; then
+			sink_running=true
+		fi
+		if grep -Fq 'state: RUNNING' "/proc/asound/card${card_number}/pcm0p/sub0/status" 2>/dev/null; then
+			pcm_running=true
+		fi
+		[[ $sink_running == true && $pcm_running == true ]] && break
+		sleep 0.1
+	done
+	wait "$playback_probe_pid" || playback_rc=$?
+	wait "$monitor_pid" || monitor_rc=$?
+	[[ $monitor_rc -eq 0 || $monitor_rc -eq 124 ]] || return 1
+	[[ $playback_rc -eq 0 && $sink_running == true && $pcm_running == true ]] || return 1
+	amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+	signal=$(python3 - "$desktop_probe_file" <<'PY'
+import math, struct, sys
+raw = open(sys.argv[1], "rb").read()
+samples = struct.unpack(f"<{len(raw)//2}h", raw) if raw else ()
+peak = max(map(abs, samples), default=0)
+rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
+print(f"bytes={len(raw)} peak={peak} rms={rms:.2f}")
+raise SystemExit(0 if peak and rms else 1)
+PY
+	) || return 1
+	printf 'desktop probe: sink=RUNNING pcm0=RUNNING speaker=on %s\n' "$signal" >>"$YBV_LOG"
+}
 
 restore_state() {
-	local pid restore_rc=0
+	local pid attempt restore_rc=0 desktop_rc=1 consecutive_ready desktop_wait_started
 	for pid in "$playback_pid" "$capture_pid"; do
 		[[ -n $pid ]] || continue
 		kill -TERM "$pid" 2>/dev/null || true
@@ -226,11 +287,21 @@ restore_state() {
 		alsactl -f "$state_file" restore yogabook >/dev/null 2>&1 || restore_rc=1
 	fi
 	if [[ $wireplumber_stopped == true && -n $real_user ]]; then
-		ybv_run_as_user "$real_user" systemctl --user start wireplumber >/dev/null 2>&1 || restore_rc=1
-		if ybv_has_command wpctl; then
+		for attempt in 1 2; do
+			if ((attempt == 2)); then
+				desktop_recovery_used=true
+				ybv_capture 'Desktop audio probe failure before retry' \
+					ybv_run_as_user "$real_user" timeout 3 wpctl status
+			fi
+			desktop_rc=0
+			# Restart the complete graph so desktop clients reconnect instead of
+			# retaining stale nodes from the period without a session manager.
+			ybv_run_as_user "$real_user" systemctl --user restart \
+				pipewire.service pipewire-pulse.service wireplumber.service >/dev/null 2>&1 || desktop_rc=1
+			desktop_ready_seconds=
 			consecutive_ready=0
 			desktop_wait_started=$SECONDS
-			for _ in {1..30}; do
+			for _ in {1..60}; do
 				if ybv_run_as_user "$real_user" timeout 2 wpctl status 2>/dev/null |
 					grep -Fq 'Built-in Audio Stereo Speakers'; then
 					consecutive_ready=$((consecutive_ready + 1))
@@ -243,10 +314,11 @@ restore_state() {
 				fi
 				sleep 1
 			done
-			[[ -n $desktop_ready_seconds ]] || restore_rc=1
-		else
-			restore_rc=1
-		fi
+			[[ -n $desktop_ready_seconds ]] || desktop_rc=1
+			((desktop_rc != 0)) || desktop_audio_probe || desktop_rc=1
+			((desktop_rc == 0)) && break
+		done
+		((desktop_rc == 0)) || restore_rc=1
 	fi
 	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
 		ybv_chown_tree_to_user "$real_user" "$YBV_REPORT_DIR" 2>/dev/null || true
@@ -268,8 +340,8 @@ fi
 
 if [[ -n $real_user ]]; then
 	# WirePlumber owns the ALSA/UCM nodes. Stopping only the session manager
-	# releases the PCM devices while keeping PipeWire's RTKit-initialized engine
-	# alive, avoiding a minute-long desktop audio restart on this platform.
+	# releases the PCM devices; restoration later resets the complete graph so
+	# existing desktop clients cannot retain stale links.
 	ybv_run_as_user "$real_user" systemctl --user stop wireplumber || true
 	wireplumber_stopped=true
 	sleep 2
@@ -288,6 +360,17 @@ if alsaucm -c hw:yogabook set _verb HiFi set _enadev Speaker1 set _enadev Mic1 >
 	ybv_emit audio ucm-routes PASS 'Enabled HiFi Speaker1 and Mic1 routes'
 else
 	ybv_emit audio ucm-routes FAIL 'Could not enable UCM audio routes'
+fi
+
+if [[ $action == suspend ]]; then
+	if amixer -c yogabook cset name='Speaker Switch' off >>"$YBV_LOG" 2>&1 &&
+		amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(off|0)'; then
+		ybv_emit suspend speaker-muted PASS 'Muted the physical speaker during the direct suspend transport stream'
+	else
+		ybv_emit suspend speaker-muted FAIL 'Could not mute the physical speaker before suspend'
+		ybv_finish_report
+		exit 1
+	fi
 fi
 
 run_pcm() {
@@ -310,16 +393,6 @@ if [[ $action == audio ]]; then
 	run_pcm pcm1-deep-buffer 'PCM1 deep-buffer playback opens at 48 kHz stereo' \
 		aplay -q -D hw:yogabook,1 -t raw -f S32_LE -r 48000 -c 2 -d 1 /dev/zero
 
-	tone_file="$YBV_REPORT_DIR/tone.wav"
-	python3 - "$tone_file" <<'PY'
-import math, struct, sys, wave
-rate = 48000
-with wave.open(sys.argv[1], "wb") as wav:
-    wav.setparams((2, 2, rate, rate, "NONE", "not compressed"))
-    for i in range(rate):
-        value = int(0.08 * 32767 * math.sin(2 * math.pi * 440 * i / rate))
-        wav.writeframesraw(struct.pack("<hh", value, value))
-PY
 	run_pcm speaker-tone 'Played bounded one-second 440 Hz tone at 8% digital amplitude' \
 		aplay -q -D hw:yogabook,0 "$tone_file"
 	run_pcm mic-capture 'Recorded three-second Mic1 WAV' \
@@ -346,9 +419,9 @@ PY
 else
 	stream_seconds=$((suspend_seconds + 14))
 	test_start=$(date --iso-8601=seconds)
-	timeout "$((stream_seconds + 10))" aplay -q -D hw:yogabook,0 -t raw -f S32_LE -r 48000 -c 2 -d "$stream_seconds" /dev/zero &
+	timeout "$((stream_seconds + 10))" aplay -q -D hw:yogabook,0 -t raw -f S32_LE -r 48000 -c 2 -d "$stream_seconds" /dev/zero >"$playback_log" 2>&1 &
 	playback_pid=$!
-	timeout "$((stream_seconds + 10))" arecord -q -D hw:yogabook,0 -t raw -f S32_LE -r 48000 -c 2 -d "$stream_seconds" /dev/null &
+	timeout "$((stream_seconds + 10))" arecord -q -D hw:yogabook,0 -t raw -f S32_LE -r 48000 -c 2 -d "$stream_seconds" /dev/null >"$capture_log" 2>&1 &
 	capture_pid=$!
 	sleep 3
 	if kill -0 "$playback_pid" 2>/dev/null && kill -0 "$capture_pid" 2>/dev/null; then
@@ -365,6 +438,17 @@ else
 	playback_pid=
 	if wait "$capture_pid"; then ybv_emit suspend capture-after PASS 'Capture completed after resume'; else ybv_emit suspend capture-after FAIL 'Capture failed across suspend'; fi
 	capture_pid=
+	printf '\n===== Suspend playback client =====\n' >>"$YBV_LOG"
+	cat "$playback_log" >>"$YBV_LOG"
+	printf '\n===== Suspend capture client =====\n' >>"$YBV_LOG"
+	cat "$capture_log" >>"$YBV_LOG"
+	xrun_count=$(awk 'BEGIN { IGNORECASE=1 } /underrun|overrun/ { count++ } END { print count + 0 }' "$playback_log" "$capture_log")
+	if ((xrun_count > 0)); then
+		xrun_details=$(awk 'BEGIN { IGNORECASE=1 } /underrun|overrun/ { print; if (++count == 2) exit }' "$playback_log" "$capture_log" | tr '\n' ' ')
+		ybv_emit suspend stream-xruns WARN 'Direct ALSA streams recovered after suspend with xruns' "events=$xrun_count ${xrun_details% }"
+	else
+		ybv_emit suspend stream-xruns PASS 'Direct ALSA streams resumed without reporting an xrun'
+	fi
 	journal_slice=$(journalctl -k --since "$test_start" --no-pager 2>&1 || true)
 	printf '\n===== Suspend test kernel journal =====\n%s\n' "$journal_slice" >>"$YBV_LOG"
 	fatal=$(grep -Ei 'TRIG_STOP|unexpected fault|ipc.*(error|fail|timeout)|STREAM_PCM_PARAMS.*(-110|error|fail)|error: ipc' <<<"$journal_slice" || true)
@@ -381,7 +465,10 @@ if restore_state; then
 	state_saved=false
 	wireplumber_stopped=false
 	if [[ -n $real_user ]]; then
-		ybv_emit audio state-restore PASS 'Restored ALSA state and verified the desktop speaker sink' "ready after ${desktop_ready_seconds}s"
+		if [[ $desktop_recovery_used == true ]]; then
+			ybv_emit audio desktop-recovery WARN 'Desktop playback required a second full audio-graph restart'
+		fi
+		ybv_emit audio state-restore PASS 'Restored ALSA state and verified desktop playback through the speaker sink' "ready after ${desktop_ready_seconds}s"
 	else
 		ybv_emit audio state-restore PASS 'Restored ALSA state; no desktop user services were managed'
 	fi

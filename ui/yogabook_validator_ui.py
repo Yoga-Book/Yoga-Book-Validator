@@ -90,6 +90,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
             ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
             ("Test keyboard/pen modes", "Observe one physical keyboard to pen to keyboard transition", self.on_modes, False),
+            ("Test automatic rotation", "Verify all four sensor orientations and return upright", self.on_rotation, False),
             ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
             ("Inspect platform", "Validate SoC drivers, CPU power, thermals, eMMC health, and RTC wake", self.on_platform, False),
             ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
@@ -222,6 +223,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             lambda: self.run_command("modes", ["--yes"]),
         )
 
+    def on_rotation(self, _button) -> None:
+        self.confirm(
+            "Test all automatic orientations?",
+            "Start in Halo keyboard mode. Follow the live instructions to enter pen mode, rotate the tablet slowly through both portrait orientations and upside-down landscape, return it upright, then return to Halo mode. The validator observes SensorProxy and Mutter but never changes display policy or reads input events. Administrator authorization is required.",
+            lambda: self.run_command("rotation", ["--yes"]),
+        )
+
     def on_lights(self, _button) -> None:
         self.confirm(
             "Test panel and platform lights?",
@@ -256,7 +264,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.spinner.start()
         self.set_sensitive(False)
 
-        if command == "modes":
+        if command in ("modes", "rotation"):
             self.run_interactive_command(argv, output)
             return
 

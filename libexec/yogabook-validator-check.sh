@@ -23,6 +23,7 @@ while (($#)); do
 done
 
 ybv_begin_report check "$output_dir"
+real_user=$(ybv_real_user)
 product=$(ybv_read_first /sys/class/dmi/id/product_name)
 vendor=$(ybv_read_first /sys/class/dmi/id/sys_vendor)
 if [[ $product == *YB1-X91L* ]]; then
@@ -139,7 +140,7 @@ if [[ -n $card_number ]] && ybv_has_command amixer; then
 fi
 
 if [[ $YBV_SYSROOT == / ]] && ybv_has_command wpctl; then
-	wp_status=$(timeout 10 wpctl status 2>&1 || true)
+	wp_status=$(ybv_run_as_user "$real_user" timeout 10 wpctl status 2>&1 || true)
 	if grep -Fq 'Built-in Audio' <<<"$wp_status"; then
 		ybv_emit audio pipewire PASS 'PipeWire exposes Built-in Audio'
 	else
@@ -504,7 +505,8 @@ else
 	ybv_emit platform leds FAIL 'Platform LED controls are incomplete' "missing: ${missing_leds[*]}"
 fi
 if [[ $YBV_SYSROOT == / ]] && ybv_has_command gsettings; then
-	ambient_enabled=$(gsettings get org.gnome.settings-daemon.plugins.power ambient-enabled 2>/dev/null || echo unknown)
+	ambient_enabled=$(ybv_run_as_user "$real_user" gsettings get \
+		org.gnome.settings-daemon.plugins.power ambient-enabled 2>/dev/null || echo unknown)
 	light_level=
 	if ybv_has_command busctl; then
 		light_level=$(busctl get-property net.hadess.SensorProxy /net/hadess/SensorProxy net.hadess.SensorProxy LightLevel 2>/dev/null | awk '{print $2}' || true)

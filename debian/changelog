@@ -1,3 +1,33 @@
+yogabook-validator (0.20.0) unstable; urgency=medium
+
+  * Keep CLI, AppStream and documented package versions aligned.
+  * Capture and report recovered ALSA xruns during suspend validation.
+  * Add guided all-orientations SensorProxy and Mutter rotation validation.
+  * Rebuild and verify the full desktop audio graph after direct ALSA tests.
+  * Mute the physical speaker during suspend transport validation.
+  * Return privileged report directories and files to the desktop user.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 22 Aug 2026 16:49:00 +0200
+
+yogabook-validator (0.19.0) unstable; urgency=medium
+
+  * Debounce keyboard and pen mode transitions before validating state.
+  * Correlate pen-mode Mutter transforms with physical sensor orientation.
+  * Record synchronized mode, SensorProxy and Mutter transition evidence.
+  * Handle tuple-valued python-evdev capability aliases.
+  * Inspect PipeWire and desktop settings in the active user session.
+  * Require the absolute upright landscape transform after returning to Halo.
+  * Stop the transition tracer cooperatively across the user boundary.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 22 Aug 2026 16:35:00 +0200
+
+yogabook-validator (0.18.0) unstable; urgency=medium
+
+  * Validate the HiDeep display touchscreen across keyboard and pen modes.
+  * Keep the raw Goodix surface restricted to Halo keyboard validation.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 22 Aug 2026 06:20:00 +0200
+
 yogabook-validator (0.17.0) unstable; urgency=medium
 
   * Validate the i915 Micro-HDMI DRM connector.

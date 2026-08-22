@@ -17,6 +17,7 @@ required=(
 	libexec/yogabook-validator-display.sh
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
+	libexec/yogabook-validator-mode-trace.py
 	libexec/yogabook-validator-modes.sh
 	libexec/yogabook-validator-platform.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
@@ -59,7 +60,7 @@ done
 if command -v shellcheck >/dev/null; then
 	shellcheck -x -P "$root/libexec" "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 fi
-python3 -m py_compile "$root/ui/yogabook_validator_ui.py"
+python3 -m py_compile "$root/ui/yogabook_validator_ui.py" "$root"/libexec/*.py
 python3 - <<PY
 import ast
 import xml.etree.ElementTree as ET
@@ -75,15 +76,44 @@ if command -v appstreamcli >/dev/null; then
 	appstreamcli validate --no-net "$root/data/metainfo/org.yogabook.Validator.metainfo.xml"
 fi
 
+package_version=$(dpkg-parsechangelog -l"$root/debian/changelog" -S Version)
+cli_version=$(sed -n 's/^YBV_VERSION=//p' "$root/libexec/yogabook-validator-common.sh" | head -n 1)
+metainfo_version=$(python3 - "$root/data/metainfo/org.yogabook.Validator.metainfo.xml" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+print(root.find("./releases/release").attrib["version"])
+PY
+)
+[[ $cli_version == "$package_version" ]]
+[[ $metainfo_version == "$package_version" ]]
+grep -Fq "yogabook-validator_${package_version}_all.deb" "$root/README.md"
+
 store_line=$(grep -n 'store yogabook' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
 stop_line=$(grep -n 'systemctl --user stop' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
 [[ -n $store_line && -n $stop_line && $store_line -lt $stop_line ]]
 grep -Fq 'systemctl --user stop wireplumber' "$root/libexec/yogabook-validator-active.sh"
-grep -Fq 'systemctl --user start wireplumber' "$root/libexec/yogabook-validator-active.sh"
+if grep -Fq 'systemctl --user start wireplumber' "$root/libexec/yogabook-validator-active.sh"; then
+	echo 'active audio tests must not restore stale clients with a WirePlumber-only start' >&2
+	exit 1
+fi
 if grep -Eq 'systemctl --user (stop|start).*pipewire' "$root/libexec/yogabook-validator-active.sh"; then
 	echo 'active audio tests must keep the PipeWire engine and sockets running' >&2
 	exit 1
 fi
+grep -Fq 'systemctl --user restart' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'pipewire.service pipewire-pulse.service wireplumber.service' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'desktop_audio_probe' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'parec --device="${default_sink}.monitor"' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'pcm0p/sub0/status' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "cget name='Speaker Switch'" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'Desktop playback required a second full audio-graph restart' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'pactl parec pw-play wpctl systemctl' "$root/libexec/yogabook-validator-active.sh"
+grep -Eq '^ python3-evdev, python3-gi, pipewire-bin, pulseaudio-utils,' "$root/debian/control"
+grep -Fq 'chown -- "$report_owner:$(id -gn "$report_owner")" "$YBV_RESULTS_BASE"' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'generated_default=true' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'ybv_chown_tree_to_user "$YBV_AUTO_REPORT_OWNER" "$YBV_REPORT_DIR"' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq "trap 'restore_state || true' EXIT INT TERM" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq "state-restore FAIL" "$root/libexec/yogabook-validator-active.sh"
 if grep -Fq 'set _verb HiFi list _devices' "$root/libexec/yogabook-validator-check.sh"; then
@@ -91,6 +121,11 @@ if grep -Fq 'set _verb HiFi list _devices' "$root/libexec/yogabook-validator-che
 	exit 1
 fi
 grep -Fq "Built-in Audio Stereo Speakers" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'suspend-playback.log' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'suspend-capture.log' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'stream-xruns' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'speaker-muted PASS' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "cset name='Speaker Switch' off" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'ff.Replay(150, 0)' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'strong_magnitude=0x5000' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'YBV_ACTIVE_DISPATCH=1' "$root/libexec/yogabook-validator-active.sh"
@@ -130,8 +165,21 @@ grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-inputs.
 grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-modes.sh"
 grep -Fq 'LIBINPUT_CALIBRATION_MATRIX' "$root/libexec/yogabook-validator-modes.sh"
 grep -Fq 'Wacom HID 169 Pen' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'HDP0001:00 2ABB:8102' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'stable_samples=10' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'mode-transition.tsv' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'halo-landscape-restored' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'expected=DSI-1 1920x1200 transform=0' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq -- '--all-orientations' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'rotation-upright-return' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'expected_transform_for_sensor' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'AccelerometerOrientation' "$root/libexec/yogabook-validator-mode-trace.py"
+grep -Fq 'GetCurrentState' "$root/libexec/yogabook-validator-mode-trace.py"
+grep -Fq -- '--stop-file' "$root/libexec/yogabook-validator-mode-trace.py"
 grep -Fq 'ACTION_REQUIRED:' "$root/libexec/yogabook-validator-modes.sh"
 grep -Fq 'GetCurrentState' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'ybv_run_as_user "$real_user" timeout 10 wpctl status' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'ybv_run_as_user "$real_user" gsettings get' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'screen-keyboard-enabled' "$root/libexec/yogabook-validator-modes.sh"
 grep -Fq 'org.gnome.Shell' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq '/sys/class/drm/renderD' "$root/libexec/yogabook-validator-display.sh"
@@ -148,6 +196,12 @@ if grep -Fq 'run_subtest modes' "$root/libexec/yogabook-validator-automated.sh";
 	echo 'physical mode-cycle validation must not be part of automated' >&2
 	exit 1
 fi
+if grep -Fq 'run_subtest rotation' "$root/libexec/yogabook-validator-automated.sh"; then
+	echo 'physical all-orientations validation must not be part of automated' >&2
+	exit 1
+fi
+grep -Fq 'rotation               Verify all four automatic display orientations' "$root/src/yogabook-validator.sh"
+grep -Fq 'command in ("modes", "rotation")' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'cht_wcove_pwrsrc' "$root/libexec/yogabook-validator-power.sh"

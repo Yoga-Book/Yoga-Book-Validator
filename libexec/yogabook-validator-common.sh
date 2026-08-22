@@ -3,12 +3,13 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.17.0
+YBV_VERSION=0.20.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
 YBV_FAILURES=0
 YBV_WARNINGS=0
+YBV_AUTO_REPORT_OWNER=
 
 ybv_path() {
 	local path=$1
@@ -29,14 +30,23 @@ ybv_sanitize() {
 
 ybv_begin_report() {
 	local command_name=$1 requested_dir=${2:-}
-	local timestamp
+	local timestamp report_owner generated_default=false
 	timestamp=$(date +%Y%m%d-%H%M%S)
 	if [[ -n $requested_dir ]]; then
 		YBV_REPORT_DIR=$requested_dir
 	elif [[ -z $YBV_REPORT_DIR ]]; then
 		YBV_REPORT_DIR="$YBV_RESULTS_BASE/${command_name}-${timestamp}"
+		generated_default=true
 	fi
 	mkdir -p -- "$YBV_REPORT_DIR"
+	if [[ $generated_default == true && $EUID -eq 0 ]]; then
+		report_owner=$(ybv_real_user)
+		if [[ -n $report_owner && $report_owner != root ]] && id "$report_owner" >/dev/null 2>&1; then
+			YBV_AUTO_REPORT_OWNER=$report_owner
+			chown -- "$report_owner:$(id -gn "$report_owner")" "$YBV_RESULTS_BASE" 2>/dev/null || true
+			chown -- "$report_owner:$(id -gn "$report_owner")" "$YBV_REPORT_DIR" 2>/dev/null || true
+		fi
+	fi
 	YBV_REPORT="$YBV_REPORT_DIR/results.tsv"
 	YBV_LOG="$YBV_REPORT_DIR/validator.log"
 	printf 'timestamp\tsubsystem\tcheck_id\tstatus\tsummary\tdetails\n' >"$YBV_REPORT"
@@ -78,6 +88,9 @@ ybv_finish_report() {
 		printf 'Failures: %d\nWarnings: %d\n' "$YBV_FAILURES" "$YBV_WARNINGS"
 		printf 'Finished: %s\n' "$(date --iso-8601=seconds)"
 	} | tee -a "$YBV_LOG"
+	if [[ -n $YBV_AUTO_REPORT_OWNER ]]; then
+		ybv_chown_tree_to_user "$YBV_AUTO_REPORT_OWNER" "$YBV_REPORT_DIR" 2>/dev/null || true
+	fi
 	printf '%s\n' "$YBV_REPORT_DIR"
 	if [[ $automated == true && $result == FAIL ]]; then
 		return 1
