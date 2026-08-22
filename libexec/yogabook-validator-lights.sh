@@ -130,8 +130,5 @@ else
 	ybv_emit platform state-restore FAIL 'Could not restore panel or LED state'
 fi
 
-if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-	chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
-fi
 YBV_PHYSICAL_RESULT=PENDING
-ybv_finish_report
+ybv_finish_report_for_user "$real_user"

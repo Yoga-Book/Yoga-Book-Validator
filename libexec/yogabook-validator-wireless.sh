@@ -66,10 +66,7 @@ for candidate in /sys/class/rfkill/rfkill*; do
 done
 if [[ -z $rfkill_path ]]; then
 	ybv_emit wireless bluetooth-controller FAIL 'Bluetooth rfkill device is missing'
-	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
-	fi
-	ybv_finish_report
+	ybv_finish_report_for_user "$real_user" || true
 	exit 1
 fi
 
@@ -79,10 +76,7 @@ if [[ $controller_name =~ ^hci([0-9]+)$ ]]; then
 	controller_index=${BASH_REMATCH[1]}
 else
 	ybv_emit wireless bluetooth-controller FAIL 'Bluetooth controller index could not be resolved' "$controller_name"
-	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
-	fi
-	ybv_finish_report
+	ybv_finish_report_for_user "$real_user" || true
 	exit 1
 fi
 initial_power=$(bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
@@ -149,8 +143,5 @@ else
 	ybv_emit wireless state-restore FAIL 'Could not restore the original Bluetooth power or rfkill state'
 fi
 
-if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-	chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
-fi
 YBV_PHYSICAL_RESULT=PENDING
-ybv_finish_report
+ybv_finish_report_for_user "$real_user"

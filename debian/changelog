@@ -1,3 +1,12 @@
+yogabook-validator (0.9.0) unstable; urgency=medium
+
+  * Add one-command combined automated hardware validation.
+  * Preserve individual subreports and merge structured suite results.
+  * Keep suspend explicitly opt-in with --include-suspend.
+  * Return privileged report trees to the invoking user's primary group.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 02:37:00 +0200
+
 yogabook-validator (0.8.0) unstable; urgency=medium
 
   * Validate xHCI root hubs, USB role switch and fixed XMM transport.

@@ -53,12 +53,9 @@ for candidate in /sys/block/mmcblk*; do
 done
 if [[ -z $sd_name ]]; then
 	ybv_emit storage sd-card SKIP 'No SD card is inserted; read transport was not tested'
-	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
-	fi
 	trap - EXIT INT TERM
 	YBV_PHYSICAL_RESULT=PENDING
-	ybv_finish_report
+	ybv_finish_report_for_user "$real_user"
 	exit
 fi
 sd_device="/dev/$sd_name"
@@ -130,9 +127,6 @@ if [[ -n $active_mount ]]; then
 	fi
 fi
 
-if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-	chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
-fi
 if [[ -z $active_mount ]]; then trap - EXIT INT TERM; fi
 YBV_PHYSICAL_RESULT=PENDING
-ybv_finish_report
+ybv_finish_report_for_user "$real_user"

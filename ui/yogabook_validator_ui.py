@@ -81,7 +81,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
         actions = Adw.PreferencesGroup(title="Validation")
         page.add(actions)
         for title, subtitle, callback, suggested in [
-            ("Run passive audit", "Read-only checks; no administrator access", self.on_audit, True),
+            ("Run automated suite", "All transport checks except suspend, with one authorization", self.on_automated, True),
+            ("Run passive audit", "Read-only checks; no administrator access", self.on_audit, False),
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
             ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
@@ -145,6 +146,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
     def on_audit(self, _button) -> None:
         self.run_command("check", [])
+
+    def on_automated(self, _button) -> None:
+        self.confirm(
+            "Run the automated hardware suite?",
+            "The suite runs passive, sensor, power, USB, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
+            lambda: self.run_command("automated", ["--yes"]),
+        )
 
     def on_audio(self, _button) -> None:
         self.confirm(
@@ -221,7 +229,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
         def worker() -> None:
             try:
-                completed = subprocess.run(argv, text=True, capture_output=True, timeout=300, check=False)
+                command_timeout = 600 if command == "automated" else 300
+                completed = subprocess.run(argv, text=True, capture_output=True, timeout=command_timeout, check=False)
                 error = completed.stderr.strip() if completed.returncode not in (0, 1) else ""
             except (OSError, subprocess.TimeoutExpired) as exc:
                 error = str(exc)

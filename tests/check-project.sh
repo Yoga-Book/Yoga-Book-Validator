@@ -11,7 +11,8 @@ required=(
 	README.md ATTRIBUTION.md CONTRIBUTING.md LICENSE Makefile
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
-	libexec/yogabook-validator-active.sh libexec/yogabook-validator-camera.sh
+	libexec/yogabook-validator-active.sh libexec/yogabook-validator-automated.sh
+	libexec/yogabook-validator-camera.sh
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
@@ -32,7 +33,7 @@ done < <(
 	printf '%s\n' "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 )
 test -x "$root/ui/yogabook_validator_ui.py"
-for private_helper in yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
 	set +e
 	"$root/libexec/$private_helper" >/dev/null 2>&1
 	helper_rc=$?
@@ -84,6 +85,20 @@ grep -Fq 'ff.Replay(150, 0)' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'strong_magnitude=0x5000' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'YBV_ACTIVE_DISPATCH=1' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'ybv_run_as_user "$real_user" mkdir -p -- "$output_dir"' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'run_subtest audio' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq 'include_suspend == true' "$root/libexec/yogabook-validator-automated.sh"
+for report_writer in yogabook-validator-active.sh yogabook-validator-automated.sh; do
+	finish_line=$(grep -nF 'ybv_finish_report || finish_rc=$?' "$root/libexec/$report_writer" | tail -n 1 | cut -d: -f1)
+	owner_line=$(grep -nF 'ybv_chown_tree_to_user "$real_user"' "$root/libexec/$report_writer" | tail -n 1 | cut -d: -f1)
+	[[ -n $finish_line && -n $owner_line && $finish_line -lt $owner_line ]]
+done
+grep -Fq 'finish_report_for_user || finish_rc=$?' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'chown -R -- "$user:$group" "$path"' "$root/libexec/yogabook-validator-common.sh"
+! grep -RqF 'chown -R -- "$real_user:' "$root/libexec"
+for report_writer in yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+	grep -Fq 'ybv_finish_report_for_user "$real_user"' "$root/libexec/$report_writer"
+done
+grep -Fq 'command_timeout = 600 if command == "automated" else 300' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'does not grab devices' "$root/README.md"
 grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"

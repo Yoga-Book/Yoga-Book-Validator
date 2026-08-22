@@ -15,6 +15,7 @@ usage() {
 Usage: yogabook-validator COMMAND [OPTIONS]
 
 Commands:
+  automated              Run all non-suspend automated validation
   check                  Run the passive full-stack audit
   audio                  Run state-safe audio transport and signal tests
   camera                 Stream three frames from both cameras and restore route
@@ -34,8 +35,8 @@ Commands:
   ui                     Open the graphical validator
   version                Print the installed version
 
-Active audio and suspend tests request administrator authorization. Reports
-contain results.tsv and validator.log under ./yogabook-validator-results.
+Active and combined tests request administrator authorization. Reports contain
+results.tsv and validator.log under ./yogabook-validator-results.
 EOF
 }
 
@@ -46,7 +47,7 @@ case $command_name in
 check | camera | gnss | physical | full | bundle | power | sensors | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
-audio | haptics | inputs | lights | storage | suspend | wireless)
+audio | automated | haptics | inputs | lights | storage | suspend | wireless)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then

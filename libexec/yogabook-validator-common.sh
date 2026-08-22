@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.8.0
+YBV_VERSION=0.9.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -140,4 +140,19 @@ ybv_run_as_user() {
 	runuser -u "$user" -- env \
 		XDG_RUNTIME_DIR="/run/user/$uid" \
 		DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@"
+}
+
+ybv_chown_tree_to_user() {
+	local user=$1 path=$2 group
+	group=$(id -gn "$user") || return 1
+	chown -R -- "$user:$group" "$path"
+}
+
+ybv_finish_report_for_user() {
+	local user=$1 finish_rc=0
+	ybv_finish_report || finish_rc=$?
+	if [[ -n $user && -d $YBV_REPORT_DIR ]]; then
+		ybv_chown_tree_to_user "$user" "$YBV_REPORT_DIR" 2>/dev/null || true
+	fi
+	return "$finish_rc"
 }

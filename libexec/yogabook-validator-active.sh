@@ -13,6 +13,7 @@ shift
 
 output_dir=
 assume_yes=false
+include_suspend=false
 suspend_seconds=8
 while (($#)); do
 	case $1 in
@@ -20,6 +21,9 @@ while (($#)); do
 		[[ $# -ge 2 ]] || { echo 'ERROR: --output requires a directory' >&2; exit 2; }
 		output_dir=$2; shift 2 ;;
 	--yes) assume_yes=true; shift ;;
+	--include-suspend)
+		[[ $action == automated ]] || { echo 'ERROR: --include-suspend is valid only for automated' >&2; exit 2; }
+		include_suspend=true; shift ;;
 	--seconds)
 		[[ $# -ge 2 ]] || { echo 'ERROR: --seconds requires a value' >&2; exit 2; }
 		suspend_seconds=$2; shift 2 ;;
@@ -34,6 +38,12 @@ done
 case $action in
 audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
+automated)
+	if [[ $include_suspend == true ]]; then
+		prompt='This suite runs every automated transport check, including camera routing, haptics, lights, wireless, storage, audible audio and an eight-second suspend/resume cycle.'
+	else
+		prompt='This suite runs every automated transport check, including camera routing, haptics, lights, wireless, storage and audible audio; suspend remains opt-in.'
+	fi ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
 inputs)
@@ -59,7 +69,7 @@ fi
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 if [[ $action == haptics || $action == inputs ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
-elif [[ $action == lights || $action == storage || $action == wireless ]]; then
+elif [[ $action == automated || $action == lights || $action == storage || $action == wireless ]]; then
 	:
 else
 	for required in alsactl alsaucm aplay arecord timeout python3; do
@@ -90,11 +100,28 @@ if [[ -n $real_user ]]; then
 	fi
 fi
 
+if [[ $action == automated ]]; then
+	automated_args=(--output "$output_dir")
+	[[ $include_suspend == true ]] && automated_args+=(--include-suspend)
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-automated.sh" "${automated_args[@]}"
+fi
+
 if [[ $action == inputs || $action == lights || $action == storage || $action == wireless ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-$action.sh" --output "$output_dir"
 fi
 
 ybv_begin_report "$action" "$output_dir"
+
+finish_report_for_user() {
+	local finish_rc=0
+	YBV_PHYSICAL_RESULT=PENDING
+	ybv_finish_report || finish_rc=$?
+	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
+		ybv_chown_tree_to_user "$real_user" "$YBV_REPORT_DIR" 2>/dev/null || true
+	fi
+	return "$finish_rc"
+}
+
 if [[ $action == haptics ]]; then
 	run_haptic() {
 		local label=$1 path=$2 details
@@ -153,18 +180,15 @@ PY
 		fi
 		sleep 0.35
 	done
-	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
-	fi
-	YBV_PHYSICAL_RESULT=PENDING
-	ybv_finish_report
-	exit
+	finish_rc=0
+	finish_report_for_user || finish_rc=$?
+	exit "$finish_rc"
 fi
 
 card_number=$(ybv_find_card_number || true)
 if [[ -z $card_number ]]; then
 	ybv_emit audio alsa-card FAIL 'ALSA card ID yogabook is missing'
-	ybv_finish_report
+	finish_report_for_user || true
 	exit 1
 fi
 
@@ -211,7 +235,7 @@ restore_state() {
 		fi
 	fi
 	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
-		chown -R -- "$real_user:" "$YBV_REPORT_DIR" 2>/dev/null || true
+		ybv_chown_tree_to_user "$real_user" "$YBV_REPORT_DIR" 2>/dev/null || true
 	fi
 	return "$restore_rc"
 }
@@ -343,5 +367,6 @@ if restore_state; then
 else
 	ybv_emit audio state-restore FAIL 'ALSA state or desktop audio service restoration failed; EXIT trap will retry'
 fi
-YBV_PHYSICAL_RESULT=PENDING
-ybv_finish_report
+finish_rc=0
+finish_report_for_user || finish_rc=$?
+exit "$finish_rc"

@@ -41,12 +41,13 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.8.0_all.deb
+sudo apt install ../yogabook-validator_0.9.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
 
 ```bash
+yogabook-validator automated
 yogabook-validator check
 yogabook-validator audio
 yogabook-validator camera
@@ -62,6 +63,9 @@ yogabook-validator wireless
 yogabook-validator gnss
 yogabook-validator physical
 ```
+
+Add `--include-suspend` to `automated` only when an automatic eight-second
+suspend/resume cycle is appropriate.
 
 The UI and CLI save `results.tsv` and `validator.log` under the user's results
 directory. The active audio and suspend tests ask for confirmation and Polkit
@@ -103,6 +107,11 @@ The USB test validates both xHCI root hubs, the Intel role switch and the fixed
 XMM7260 `cdc_mbim` transport. It validates attached removable devices without
 logging their identity, or records SKIP when no OTG accessory is connected.
 
+The automated suite requests authorization once, runs all transport checks in
+a deterministic order, preserves every subreport and creates a merged
+`results.tsv`. It continues after failures so the report contains complete
+evidence. Suspend remains opt-in.
+
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
 the original Bluetooth power and rfkill state. Nearby device identities are
@@ -113,6 +122,7 @@ temporary mount in its exit trap.
 
 ## Commands
 
+`automated` runs every non-suspend automated check and merges its reports.
 `check` performs the read-only full-stack audit. `audio` tests PCM0 playback and
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
