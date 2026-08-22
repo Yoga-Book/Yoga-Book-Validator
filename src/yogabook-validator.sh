@@ -19,6 +19,7 @@ Commands:
   check                  Run the passive full-stack audit
   audio                  Run state-safe audio transport and signal tests
   camera                 Stream three frames from both cameras and restore route
+  display                Inspect i915, DSI, Mutter and desktop display policy
   haptics                Pulse both Halo haptic actuators for 150 ms
   inputs                 Inspect kernel capabilities without reading events
   lights                 Exercise and restore panel and platform lights
@@ -46,7 +47,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | camera | gnss | physical | full | bundle | platform | power | sensors | usb)
+check | camera | display | gnss | physical | full | bundle | platform | power | sensors | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 audio | automated | haptics | inputs | lights | modes | storage | suspend | wireless)

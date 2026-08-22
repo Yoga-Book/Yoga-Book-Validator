@@ -85,6 +85,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Run passive audit", "Read-only checks; no administrator access", self.on_audit, False),
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
             ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
+            ("Inspect display", "Validate i915, the DSI panel, Mutter layout, and desktop policy", self.on_display, False),
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
             ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
             ("Test keyboard/pen modes", "Observe one physical keyboard to pen to keyboard transition", self.on_modes, False),
@@ -156,7 +157,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_automated(self, _button) -> None:
         self.confirm(
             "Run the automated hardware suite?",
-            "The suite runs passive, platform, sensor, power, USB, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
+            "The suite runs passive, platform, display, sensor, power, USB, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
             lambda: self.run_command("automated", ["--yes"]),
         )
 
@@ -180,6 +181,9 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "The validator briefly switches the AtomISP media route, captures three frames from each camera to /dev/null, and restores the original route. Images are not saved.",
             lambda: self.run_command("camera", ["--yes"]),
         )
+
+    def on_display(self, _button) -> None:
+        self.run_command("display", [])
 
     def on_haptics(self, _button) -> None:
         self.confirm(

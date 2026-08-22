@@ -89,42 +89,6 @@ halo_ready() {
 		input_present 'Halo Keyboard Touchpad'
 }
 
-mutter_state() {
-	ybv_run_as_user "$real_user" python3 - <<'PY'
-from gi.repository import Gio
-
-bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-reply = bus.call_sync(
-    "org.gnome.Mutter.DisplayConfig",
-    "/org/gnome/Mutter/DisplayConfig",
-    "org.gnome.Mutter.DisplayConfig",
-    "GetCurrentState",
-    None,
-    None,
-    Gio.DBusCallFlags.NONE,
-    5000,
-    None,
-)
-_serial, monitors, logical_monitors, _properties = reply.unpack()
-current_modes = {}
-for monitor_spec, modes, _monitor_properties in monitors:
-    connector = monitor_spec[0]
-    current_modes[connector] = next(
-        (mode[0] for mode in modes if mode[6].get("is-current", False)),
-        "unknown",
-    )
-rows = []
-for _x, _y, scale, transform, primary, monitor_specs, _logical_properties in logical_monitors:
-    for monitor_spec in monitor_specs:
-        connector = monitor_spec[0]
-        rows.append(
-            f"connector={connector} mode={current_modes.get(connector, 'unknown')} "
-            f"transform={transform} primary={str(primary).lower()} scale={scale:.6f}"
-        )
-print("\n".join(sorted(rows)))
-PY
-}
-
 desktop_settings() {
 	local orientation onscreen
 	orientation=$(ybv_run_as_user "$real_user" gsettings get \
@@ -212,7 +176,7 @@ else
 	ybv_emit input pen-start PASS 'Wacom pen is inactive in Halo keyboard mode'
 fi
 
-baseline_display=$(mutter_state 2>>"$YBV_LOG" || true)
+baseline_display=$(ybv_mutter_state "$real_user" 2>>"$YBV_LOG" || true)
 if [[ -n $baseline_display ]]; then
 	ybv_emit display mutter-start PASS 'Captured the initial Mutter logical display state' "$baseline_display"
 else
@@ -285,7 +249,7 @@ if input_present 'Goodix Capacitive TouchScreen'; then
 else
 	ybv_emit input touchscreen-pen-mode FAIL 'Display touchscreen disappeared in pen mode'
 fi
-pen_display=$(mutter_state 2>>"$YBV_LOG" || true)
+pen_display=$(ybv_mutter_state "$real_user" 2>>"$YBV_LOG" || true)
 compare_state mutter-pen-mode 'Mutter logical display state in pen mode' "$baseline_display" "$pen_display"
 pen_settings=$(desktop_settings 2>>"$YBV_LOG" || true)
 compare_state settings-pen-mode 'GNOME orientation-lock and onscreen-keyboard settings in pen mode' "$baseline_settings" "$pen_settings"
@@ -332,7 +296,7 @@ if input_present 'Goodix Capacitive TouchScreen'; then
 else
 	ybv_emit input touchscreen-restored FAIL 'Display touchscreen is missing after the mode cycle'
 fi
-final_display=$(mutter_state 2>>"$YBV_LOG" || true)
+final_display=$(ybv_mutter_state "$real_user" 2>>"$YBV_LOG" || true)
 compare_state mutter-restored 'Mutter logical display state after the mode cycle' "$baseline_display" "$final_display"
 final_settings=$(desktop_settings 2>>"$YBV_LOG" || true)
 compare_state settings-restored 'GNOME orientation-lock and onscreen-keyboard settings after the mode cycle' "$baseline_settings" "$final_settings"

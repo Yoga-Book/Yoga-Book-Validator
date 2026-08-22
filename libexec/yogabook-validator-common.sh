@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.11.1
+YBV_VERSION=0.12.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -137,9 +137,51 @@ ybv_run_as_user() {
 	shift
 	local uid
 	uid=$(id -u "$user")
-	runuser -u "$user" -- env \
-		XDG_RUNTIME_DIR="/run/user/$uid" \
-		DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@"
+	if [[ $(id -u) -eq $uid ]]; then
+		env XDG_RUNTIME_DIR="/run/user/$uid" \
+			DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@"
+	else
+		runuser -u "$user" -- env \
+			XDG_RUNTIME_DIR="/run/user/$uid" \
+			DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@"
+	fi
+}
+
+ybv_mutter_state() {
+	local user=$1
+	ybv_run_as_user "$user" python3 - <<'PY'
+from gi.repository import Gio
+
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+reply = bus.call_sync(
+    "org.gnome.Mutter.DisplayConfig",
+    "/org/gnome/Mutter/DisplayConfig",
+    "org.gnome.Mutter.DisplayConfig",
+    "GetCurrentState",
+    None,
+    None,
+    Gio.DBusCallFlags.NONE,
+    5000,
+    None,
+)
+_serial, monitors, logical_monitors, _properties = reply.unpack()
+current_modes = {}
+for monitor_spec, modes, _monitor_properties in monitors:
+    connector = monitor_spec[0]
+    current_modes[connector] = next(
+        (mode[0] for mode in modes if mode[6].get("is-current", False)),
+        "unknown",
+    )
+rows = []
+for _x, _y, scale, transform, primary, monitor_specs, _logical_properties in logical_monitors:
+    for monitor_spec in monitor_specs:
+        connector = monitor_spec[0]
+        rows.append(
+            f"connector={connector} mode={current_modes.get(connector, 'unknown')} "
+            f"transform={transform} primary={str(primary).lower()} scale={scale:.6f}"
+        )
+print("\n".join(sorted(rows)))
+PY
 }
 
 ybv_chown_tree_to_user() {

@@ -59,6 +59,7 @@ run_subtest() {
 
 run_subtest check run_as_desktop "$LIBEXEC_DIR/yogabook-validator-check.sh"
 run_subtest platform run_as_desktop "$LIBEXEC_DIR/yogabook-validator-platform.sh"
+run_subtest display run_as_desktop "$LIBEXEC_DIR/yogabook-validator-display.sh"
 run_subtest sensors run_as_desktop "$LIBEXEC_DIR/yogabook-validator-sensors.sh"
 run_subtest power run_as_desktop "$LIBEXEC_DIR/yogabook-validator-power.sh"
 run_subtest usb run_as_desktop "$LIBEXEC_DIR/yogabook-validator-usb.sh"

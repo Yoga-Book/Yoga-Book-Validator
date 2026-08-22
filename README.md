@@ -28,6 +28,8 @@ remain in their own packages.
 - direct PCM formats, microphone signal and audio across suspend/resume;
 - live data from every IIO sensor channel and state-restoring panel, Halo,
   indicator and charging light controls;
+- i915/DRM render access, the native DSI panel, GNOME Shell GPU use, Mutter
+  landscape layout, rotation/brightness policy and targeted display faults;
 - guided physical acceptance for behavior software cannot prove.
 
 Automated results never imply that a speaker, microphone, pen, camera, sensor,
@@ -43,7 +45,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.11.1_all.deb
+sudo apt install ../yogabook-validator_0.12.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -53,6 +55,7 @@ yogabook-validator automated
 yogabook-validator check
 yogabook-validator audio
 yogabook-validator camera
+yogabook-validator display
 yogabook-validator haptics
 yogabook-validator inputs
 yogabook-validator lights
@@ -110,6 +113,12 @@ GNOME orientation-lock and onscreen-keyboard settings, and transition-time
 kernel errors. It never reads keys, touches or pen strokes. Because this test
 requires physical action, it is intentionally excluded from `automated`.
 
+The display test is passive. It validates the i915 DRM card and render node,
+the native DSI panel, GNOME Shell's live GPU file descriptors, Mutter's
+primary landscape layout, the unlocked rotation policy, the intentionally
+disabled aggressive automatic-brightness policy, and targeted display errors.
+It does not rotate the screen, change brightness or capture screen contents.
+
 The power test reads the battery fuel gauge and charger without changing any
 charging policy. It validates health, electrical and charge-counter ranges,
 cross-checks both charger interfaces, and confirms that UPower exposes the
@@ -144,7 +153,8 @@ temporary mount in its exit trap.
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, captures three frames from each sensor to `/dev/null`, and
-restores the original route. `haptics` plays one bounded 150 ms pulse on each
+restores the original route. `display` inspects the live i915, DSI, Mutter and
+GNOME Shell display stack without changing it. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `modes` observes one physical Halo keyboard to Wacom pen to
 Halo keyboard cycle and accepts `--timeout SECONDS`. `storage` validates an

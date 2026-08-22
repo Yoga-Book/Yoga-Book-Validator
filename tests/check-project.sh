@@ -13,6 +13,7 @@ required=(
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
 	libexec/yogabook-validator-active.sh libexec/yogabook-validator-automated.sh
 	libexec/yogabook-validator-camera.sh
+	libexec/yogabook-validator-display.sh
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
 	libexec/yogabook-validator-modes.sh
@@ -96,6 +97,7 @@ grep -Fq 'YBV_ACTIVE_DISPATCH=1' "$root/libexec/yogabook-validator-active.sh"
 # shellcheck disable=SC2016
 grep -Fq 'ybv_run_as_user "$real_user" mkdir -p -- "$output_dir"' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'run_subtest audio' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq 'run_subtest display' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'run_subtest platform' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'include_suspend == true' "$root/libexec/yogabook-validator-automated.sh"
 for report_writer in yogabook-validator-active.sh yogabook-validator-automated.sh; do
@@ -105,6 +107,11 @@ for report_writer in yogabook-validator-active.sh yogabook-validator-automated.s
 	[[ -n $finish_line && -n $owner_line && $finish_line -lt $owner_line ]]
 done
 grep -Fq 'finish_report_for_user || finish_rc=$?' "$root/libexec/yogabook-validator-active.sh"
+same_user=$(id -un)
+same_uid=$(id -u)
+same_user_runtime=$(bash -c '. "$1"; ybv_run_as_user "$2" sh -c '\''printf %s "$XDG_RUNTIME_DIR"'\''' \
+	_ "$root/libexec/yogabook-validator-common.sh" "$same_user")
+[[ $same_user_runtime == "/run/user/$same_uid" ]]
 # shellcheck disable=SC2016
 grep -Fq 'chown -R -- "$user:$group" "$path"' "$root/libexec/yogabook-validator-common.sh"
 # shellcheck disable=SC2016
@@ -123,8 +130,12 @@ grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-modes.s
 grep -Fq 'LIBINPUT_CALIBRATION_MATRIX' "$root/libexec/yogabook-validator-modes.sh"
 grep -Fq 'Wacom HID 169 Pen' "$root/libexec/yogabook-validator-modes.sh"
 grep -Fq 'ACTION_REQUIRED:' "$root/libexec/yogabook-validator-modes.sh"
-grep -Fq 'GetCurrentState' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'GetCurrentState' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq 'screen-keyboard-enabled' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'org.gnome.Shell' "$root/libexec/yogabook-validator-display.sh"
+grep -Fq '/sys/class/drm/renderD' "$root/libexec/yogabook-validator-display.sh"
+grep -Fq 'ambient-enabled' "$root/libexec/yogabook-validator-display.sh"
+grep -Fq 'software-rendering failure' "$root/libexec/yogabook-validator-display.sh"
 if grep -Eq '(^|[^[:alpha:]])(read|read_loop|grab)\(' "$root/libexec/yogabook-validator-modes.sh"; then
 	echo 'mode-cycle validation must not read or grab input events' >&2
 	exit 1
