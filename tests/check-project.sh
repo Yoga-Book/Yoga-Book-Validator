@@ -12,7 +12,8 @@ required=(
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
 	libexec/yogabook-validator-active.sh libexec/yogabook-validator-camera.sh
-	libexec/yogabook-validator-gnss.sh
+	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-storage.sh
+	libexec/yogabook-validator-wireless.sh
 	libexec/yogabook-validator-physical.sh libexec/yogabook-validator-full.sh
 	libexec/yogabook-validator-bundle.sh ui/yogabook_validator_ui.py
 	data/org.yogabook.Validator.desktop data/org.yogabook.validator.policy
@@ -28,6 +29,13 @@ done < <(
 	printf '%s\n' "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 )
 test -x "$root/ui/yogabook_validator_ui.py"
+for private_helper in yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+	set +e
+	"$root/libexec/$private_helper" >/dev/null 2>&1
+	helper_rc=$?
+	set -e
+	[[ $helper_rc -eq 2 ]]
+done
 
 shopt -s globstar nullglob
 for candidate in "$root"/src/** "$root"/libexec/** "$root"/ui/** \
@@ -71,6 +79,10 @@ fi
 grep -Fq "Built-in Audio Stereo Speakers" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'ff.Replay(150, 0)' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'strong_magnitude=0x5000' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'YBV_ACTIVE_DISPATCH=1' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'mount_options=ro,nodev,nosuid,noexec' "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq 'iflag=fullblock' "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq 'restore_wireless || true' "$root/libexec/yogabook-validator-wireless.sh"
 grep -Fq 'restore_route || true' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq -- '--stream-to=/dev/null' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq 'src" / "yogabook-validator.sh"' "$root/ui/yogabook_validator_ui.py"

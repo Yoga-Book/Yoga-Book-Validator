@@ -85,6 +85,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
             ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
+            ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
+            ("Test wireless", "Verify Wi-Fi gateway transport and briefly scan with Bluetooth", self.on_wireless, False),
             ("Test suspend", "Full-duplex audio across one suspend/resume cycle", self.on_suspend, False),
             ("Physical acceptance", "Record what you can hear, touch, and observe", self.on_physical, False),
         ]:
@@ -165,6 +167,20 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Test both haptic actuators?",
             "The validator plays one moderate-strength 150 ms force-feedback pulse on the left actuator and then the right actuator. Administrator authorization is required.",
             lambda: self.run_command("haptics", ["--yes"]),
+        )
+
+    def on_storage(self, _button) -> None:
+        self.confirm(
+            "Test inserted SD card?",
+            "The validator reads the first 4 MiB and mounts recognized filesystems read-only. It does not write to the card and removes every temporary mount.",
+            lambda: self.run_command("storage", ["--yes"]),
+        )
+
+    def on_wireless(self, _button) -> None:
+        self.confirm(
+            "Test Wi-Fi and Bluetooth?",
+            "The validator pings the Wi-Fi gateway, briefly enables Bluetooth discovery without pairing, then restores the original Bluetooth power and rfkill state.",
+            lambda: self.run_command("wireless", ["--yes"]),
         )
 
     def run_command(self, command: str, extra: list[str], output: Path | None = None) -> None:

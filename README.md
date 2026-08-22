@@ -36,7 +36,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.3.0_all.deb
+sudo apt install ../yogabook-validator_0.4.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -46,7 +46,9 @@ yogabook-validator check
 yogabook-validator audio
 yogabook-validator camera
 yogabook-validator haptics
+yogabook-validator storage
 yogabook-validator suspend 8
+yogabook-validator wireless
 yogabook-validator gnss
 yogabook-validator physical
 ```
@@ -73,6 +75,14 @@ The camera test records which AtomISP sensor links were active, streams only to
 `/dev/null`, and restores the original links on success, failure, interruption,
 or timeout. It never stores an image.
 
+The wireless test sends three packets only to the current Wi-Fi gateway. It
+briefly unblocks, powers and scans with Bluetooth without pairing, then restores
+the original Bluetooth power and rfkill state. Nearby device identities are
+discarded rather than written to reports. The storage test performs a
+bounded raw read and mounts recognized SD filesystems with read-only, nodev,
+nosuid and noexec options. It never writes to removable media and removes every
+temporary mount in its exit trap.
+
 ## Commands
 
 `check` performs the read-only full-stack audit. `audio` tests PCM0 playback and
@@ -80,7 +90,9 @@ capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, captures three frames from each sensor to `/dev/null`, and
 restores the original route. `haptics` plays one bounded 150 ms pulse on each
-actuator at moderate strength. `suspend` keeps silent
+actuator at moderate strength. `storage` validates an inserted SD card without
+writing. `wireless` checks the current Wi-Fi gateway and bounded Bluetooth
+discovery while restoring radio state. `suspend` keeps silent
 full-duplex audio active across one suspend. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`
 compresses an existing report directory while excluding sensitive artifacts.

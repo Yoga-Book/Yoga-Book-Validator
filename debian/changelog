@@ -1,3 +1,10 @@
+yogabook-validator (0.4.0) unstable; urgency=medium
+
+  * Add state-restoring Wi-Fi gateway and Bluetooth discovery tests.
+  * Add read-only block and filesystem validation for inserted SD cards.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 01:48:00 +0200
+
 yogabook-validator (0.3.0) unstable; urgency=medium
 
   * Add a bounded privileged transport test for both Halo haptic actuators.

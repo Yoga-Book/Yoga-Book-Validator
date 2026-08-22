@@ -36,8 +36,12 @@ audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
+storage)
+	prompt='This test reads the inserted SD card and mounts its filesystems read-only, then restores their original mount state.' ;;
 suspend)
 	prompt="This test takes exclusive control of audio and suspends the tablet for ${suspend_seconds} seconds." ;;
+wireless)
+	prompt='This test verifies Wi-Fi gateway transport, briefly scans with Bluetooth, and restores the original Bluetooth block and power state.' ;;
 *) echo "ERROR: unsupported active test: $action" >&2; exit 2 ;;
 esac
 
@@ -51,6 +55,8 @@ fi
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 if [[ $action == haptics ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
+elif [[ $action == storage || $action == wireless ]]; then
+	:
 else
 	for required in alsactl alsaucm aplay arecord timeout python3; do
 		ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
@@ -74,6 +80,10 @@ if [[ -n $real_user ]]; then
 	*) echo 'ERROR: active report output must be inside the invoking user home or private /var/tmp results directory' >&2; exit 2 ;;
 	esac
 	output_dir=$canonical_output
+fi
+
+if [[ $action == storage || $action == wireless ]]; then
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-$action.sh" --output "$output_dir"
 fi
 
 ybv_begin_report "$action" "$output_dir"
