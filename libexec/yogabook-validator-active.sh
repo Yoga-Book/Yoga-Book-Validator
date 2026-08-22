@@ -204,7 +204,7 @@ fi
 
 state_file="$YBV_REPORT_DIR/alsa-state"
 capture_file="$YBV_REPORT_DIR/mic1.wav"
-services_stopped=false
+wireplumber_stopped=false
 state_saved=false
 playback_pid=
 capture_pid=
@@ -220,9 +220,8 @@ restore_state() {
 	if [[ $state_saved == true ]]; then
 		alsactl -f "$state_file" restore yogabook >/dev/null 2>&1 || restore_rc=1
 	fi
-	if [[ $services_stopped == true && -n $real_user ]]; then
-		ybv_run_as_user "$real_user" systemctl --user start pipewire.socket pipewire-pulse.socket >/dev/null 2>&1 || restore_rc=1
-		ybv_run_as_user "$real_user" systemctl --user start pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || restore_rc=1
+	if [[ $wireplumber_stopped == true && -n $real_user ]]; then
+		ybv_run_as_user "$real_user" systemctl --user start wireplumber >/dev/null 2>&1 || restore_rc=1
 		if ybv_has_command wpctl; then
 			consecutive_ready=0
 			desktop_wait_started=$SECONDS
@@ -263,8 +262,11 @@ else
 fi
 
 if [[ -n $real_user ]]; then
-	ybv_run_as_user "$real_user" systemctl --user stop wireplumber pipewire-pulse pipewire pipewire-pulse.socket pipewire.socket || true
-	services_stopped=true
+	# WirePlumber owns the ALSA/UCM nodes. Stopping only the session manager
+	# releases the PCM devices while keeping PipeWire's RTKit-initialized engine
+	# alive, avoiding a minute-long desktop audio restart on this platform.
+	ybv_run_as_user "$real_user" systemctl --user stop wireplumber || true
+	wireplumber_stopped=true
 	sleep 2
 fi
 
@@ -372,7 +374,7 @@ fi
 # idempotent safety net for interruption and unexpected failures.
 if restore_state; then
 	state_saved=false
-	services_stopped=false
+	wireplumber_stopped=false
 	if [[ -n $real_user ]]; then
 		ybv_emit audio state-restore PASS 'Restored ALSA state and verified the desktop speaker sink' "ready after ${desktop_ready_seconds}s"
 	else

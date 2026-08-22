@@ -76,6 +76,12 @@ fi
 store_line=$(grep -n 'store yogabook' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
 stop_line=$(grep -n 'systemctl --user stop' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
 [[ -n $store_line && -n $stop_line && $store_line -lt $stop_line ]]
+grep -Fq 'systemctl --user stop wireplumber' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'systemctl --user start wireplumber' "$root/libexec/yogabook-validator-active.sh"
+if grep -Eq 'systemctl --user (stop|start).*pipewire' "$root/libexec/yogabook-validator-active.sh"; then
+	echo 'active audio tests must keep the PipeWire engine and sockets running' >&2
+	exit 1
+fi
 grep -Fq "trap 'restore_state || true' EXIT INT TERM" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq "state-restore FAIL" "$root/libexec/yogabook-validator-active.sh"
 if grep -Fq 'set _verb HiFi list _devices' "$root/libexec/yogabook-validator-check.sh"; then
