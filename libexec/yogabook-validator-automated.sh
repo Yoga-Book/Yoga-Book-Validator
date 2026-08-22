@@ -29,6 +29,7 @@ fi
 
 ybv_begin_report automated "$output_dir"
 suite_root=$YBV_REPORT_DIR
+gnss_restarts_before=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
 
 # Passed by name to run_subtest and invoked indirectly.
 # shellcheck disable=SC2329
@@ -75,6 +76,37 @@ if [[ $include_suspend == true ]]; then
 	run_subtest suspend "$LIBEXEC_DIR/yogabook-validator-active.sh" suspend --yes --seconds 8
 else
 	ybv_emit suite suspend SKIP 'Suspend test was not requested; use --include-suspend to include it'
+fi
+
+gnss_restarts_after=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
+if systemctl is-active --quiet yogabook-gnss.service &&
+	[[ $gnss_restarts_before =~ ^[0-9]+$ && $gnss_restarts_after =~ ^[0-9]+$ ]]; then
+	if ((gnss_restarts_after == gnss_restarts_before)); then
+		ybv_emit suite gnss-final-state PASS 'GNSS remained active without restarting across the complete automated suite' "restarts=$gnss_restarts_after"
+	else
+		ybv_emit suite gnss-final-state FAIL 'GNSS restarted during the complete automated suite' "before=$gnss_restarts_before after=$gnss_restarts_after"
+	fi
+else
+	ybv_emit suite gnss-final-state FAIL 'GNSS final service state or restart counter is unavailable' "before=${gnss_restarts_before:-missing} after=${gnss_restarts_after:-missing}"
+fi
+
+desktop_graph=$(run_as_desktop timeout 5 wpctl status 2>/dev/null || true)
+if grep -Fq 'Built-in Audio Stereo Speakers' <<<"$desktop_graph" &&
+	grep -Fq 'Built-in Audio Internal Digital Microphone' <<<"$desktop_graph"; then
+	ybv_emit suite audio-final-state PASS 'PipeWire retained the Yoga Book speaker and microphone after all active tests'
+else
+	ybv_emit suite audio-final-state FAIL 'PipeWire did not retain both Yoga Book audio endpoints after active tests'
+fi
+
+critical_services=(halo-keyboard.service iio-sensor-proxy.service bluetooth.service ModemManager.service)
+inactive_services=()
+for service in "${critical_services[@]}"; do
+	systemctl is-active --quiet "$service" || inactive_services+=("$service")
+done
+if ((${#inactive_services[@]} == 0)); then
+	ybv_emit suite services-final-state PASS 'All critical Yoga Book integration services remain active' "services=${#critical_services[@]}"
+else
+	ybv_emit suite services-final-state FAIL 'One or more critical Yoga Book integration services are inactive' "services=${inactive_services[*]}"
 fi
 
 YBV_PHYSICAL_RESULT=PENDING

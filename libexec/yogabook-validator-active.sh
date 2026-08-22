@@ -393,8 +393,19 @@ if [[ $action == audio ]]; then
 	run_pcm pcm1-deep-buffer 'PCM1 deep-buffer playback opens at 48 kHz stereo' \
 		aplay -q -D hw:yogabook,1 -t raw -f S32_LE -r 48000 -c 2 -d 1 /dev/zero
 
-	run_pcm speaker-tone 'Played bounded one-second 440 Hz tone at 8% digital amplitude' \
-		aplay -q -D hw:yogabook,0 "$tone_file"
+	if timeout 15 aplay -q -D hw:yogabook,0 "$tone_file" >>"$YBV_LOG" 2>&1; then
+		ybv_emit audio speaker-tone PASS 'Played bounded one-second 440 Hz tone at 8% digital amplitude'
+	else
+		# PCM1 teardown can transiently race the following PCM0 write on this
+		# SOF IPC3 platform. Preserve that evidence and distinguish recovery
+		# from a persistent playback failure.
+		sleep 1
+		if timeout 15 aplay -q -D hw:yogabook,0 "$tone_file" >>"$YBV_LOG" 2>&1; then
+			ybv_emit audio speaker-tone-retry WARN 'PCM0 tone recovered on one retry after the deep-buffer transition'
+		else
+			ybv_emit audio speaker-tone FAIL 'Bounded speaker tone failed twice after the deep-buffer transition'
+		fi
+	fi
 	run_pcm mic-capture 'Recorded three-second Mic1 WAV' \
 		arecord -q -D hw:yogabook,0 -t wav -f S16_LE -r 48000 -c 2 -d 3 "$capture_file"
 	if [[ -s $capture_file ]]; then

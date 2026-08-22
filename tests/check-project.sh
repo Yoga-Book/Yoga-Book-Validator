@@ -106,6 +106,8 @@ fi
 grep -Fq 'systemctl --user restart' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'pipewire.service pipewire-pulse.service wireplumber.service' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'desktop_audio_probe' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'speaker-tone-retry WARN' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'Bounded speaker tone failed twice' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'parec --device="${default_sink}.monitor"' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'pcm0p/sub0/status' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq "cget name='Speaker Switch'" "$root/libexec/yogabook-validator-active.sh"
@@ -137,6 +139,12 @@ grep -Fq 'run_subtest audio' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'run_subtest display' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'run_subtest platform' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'include_suspend == true' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq 'gnss-final-state PASS' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq 'audio-final-state PASS' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq 'services-final-state PASS' "$root/libexec/yogabook-validator-automated.sh"
+gnss_final_line=$(grep -nF 'gnss-final-state PASS' "$root/libexec/yogabook-validator-automated.sh" | cut -d: -f1)
+audio_run_line=$(grep -nF 'run_subtest audio' "$root/libexec/yogabook-validator-automated.sh" | tail -n 1 | cut -d: -f1)
+((gnss_final_line > audio_run_line))
 for passive_check in check platform display sensors power usb gnss; do
 	grep -Fq "run_subtest $passive_check" "$root/libexec/yogabook-validator-passive.sh"
 done

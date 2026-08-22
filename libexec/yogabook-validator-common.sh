@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.21.1
+YBV_VERSION=0.21.2
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}

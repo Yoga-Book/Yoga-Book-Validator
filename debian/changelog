@@ -1,3 +1,10 @@
+yogabook-validator (0.21.2) unstable; urgency=medium
+
+  * Verify GNSS, desktop audio and critical services after all active tests.
+  * Distinguish a recovered PCM0 tone retry from persistent playback failure.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 22 Aug 2026 17:30:00 +0200
+
 yogabook-validator (0.21.1) unstable; urgency=medium
 
   * Detect GNSS transport restarts during bounded health validation.
