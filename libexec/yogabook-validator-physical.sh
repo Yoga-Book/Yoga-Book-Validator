@@ -22,7 +22,7 @@ ybv_begin_report physical "$output_dir"
 physical_file="$YBV_REPORT_DIR/physical-results.tsv"
 printf 'check_id\tstatus\tnote\n' >"$physical_file"
 
-declare -a ids=(speakers headphones internal-microphone headset-microphone jack-detection headset-buttons halo-keys halo-touchpad halo-haptics halo-backlight pen-direction pen-pressure display-touch auto-rotation display-brightness front-camera rear-camera wifi bluetooth usb-otg sd-card hardware-buttons lid-switch lte-data gnss suspend-resume charging)
+declare -a ids=(speakers headphones internal-microphone headset-microphone jack-detection headset-buttons halo-keys halo-touchpad halo-haptics halo-backlight pen-direction pen-pressure display-touch auto-rotation display-brightness micro-hdmi front-camera rear-camera wifi bluetooth usb-otg sd-card hardware-buttons lid-switch lte-data gnss suspend-resume charging)
 declare -a labels=(
 	'Stereo speakers play cleanly'
 	'Headphones play cleanly'
@@ -39,6 +39,7 @@ declare -a labels=(
 	'Display touchscreen works in keyboard and pen modes'
 	'Display rotates correctly and returns to landscape'
 	'Display brightness changes smoothly under manual control'
+	'Micro-HDMI outputs video and audio to an external display'
 	'Front camera produces a usable image'
 	'Rear camera produces a usable image'
 	'Wi-Fi connects and transfers data reliably'

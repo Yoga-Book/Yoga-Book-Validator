@@ -21,15 +21,16 @@ remain in their own packages.
   and kernel capability maps;
 - the exact Halo keyboard, touchpad, dual-haptic and IIO sensor layout;
 - Wi-Fi, Bluetooth, eMMC, SD slot/card, xHCI/USB role and device topology,
-  DSI display and platform LEDs;
+  DSI display, Micro-HDMI video/audio transport and platform LEDs;
 - XMM7260/ModemManager, adapting expectations when no SIM is installed;
 - GNSS transport, both camera sensors, battery and charging;
 - BQ27542 fuel-gauge, BQ25892 charger and UPower telemetry consistency;
 - direct PCM formats, microphone signal and audio across suspend/resume;
 - live data from every IIO sensor channel and state-restoring panel, Halo,
   indicator and charging light controls;
-- i915/DRM render access, the native DSI panel, GNOME Shell GPU use, Mutter
-  landscape layout, rotation/brightness policy and targeted display faults;
+- i915/DRM render access, the native DSI panel, Micro-HDMI connector and LPE
+  audio PCMs, GNOME Shell GPU use, Mutter landscape layout,
+  rotation/brightness policy and targeted display faults;
 - guided physical acceptance for behavior software cannot prove.
 
 Automated results never imply that a speaker, microphone, pen, camera, sensor,
@@ -45,7 +46,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.14.0_all.deb
+sudo apt install ../yogabook-validator_0.17.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -167,7 +168,7 @@ playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, validates three in-memory frames from each sensor for
 payload and signal integrity, exercises one bounded rear-focus step, discards
 the frames and restores the original focus and route.
-`display` inspects the live i915, DSI, Mutter and
+`display` inspects the live i915, DSI, Micro-HDMI DRM and LPE audio, Mutter and
 GNOME Shell display stack without changing it. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `modes` observes one physical Halo keyboard to Wacom pen to

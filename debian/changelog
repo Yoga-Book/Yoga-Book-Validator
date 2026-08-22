@@ -1,3 +1,11 @@
+yogabook-validator (0.17.0) unstable; urgency=medium
+
+  * Validate the i915 Micro-HDMI DRM connector.
+  * Validate all three Intel LPE HDMI playback PCM nodes.
+  * Add Micro-HDMI video and audio to physical acceptance.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 05:50:00 +0200
+
 yogabook-validator (0.16.0) unstable; urgency=medium
 
   * Validate the WV517S rear-camera focus control path.

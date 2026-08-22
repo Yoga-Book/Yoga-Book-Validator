@@ -85,6 +85,56 @@ else
 	ybv_emit display dsi-panel FAIL 'Internal DSI-1 connector is missing'
 fi
 
+hdmi_connector=
+for candidate in "/sys/class/drm/${card_name}"-HDMI-A-*; do
+	[[ -d $candidate ]] || continue
+	hdmi_connector=$candidate
+	break
+done
+if [[ -n $hdmi_connector ]]; then
+	hdmi_status=$(ybv_read_first "$hdmi_connector/status")
+	hdmi_enabled=$(ybv_read_first "$hdmi_connector/enabled")
+	if [[ $hdmi_status == connected || $hdmi_status == disconnected ]] &&
+		[[ $hdmi_enabled == enabled || $hdmi_enabled == disabled ]]; then
+		ybv_emit display hdmi-connector PASS 'Micro-HDMI connector is exposed by i915' "${hdmi_connector##*/} status=$hdmi_status enabled=$hdmi_enabled"
+	else
+		ybv_emit display hdmi-connector FAIL 'Micro-HDMI connector state is invalid' "status=${hdmi_status:-unknown} enabled=${hdmi_enabled:-unknown}"
+	fi
+else
+	ybv_emit display hdmi-connector FAIL 'Micro-HDMI DRM connector is missing'
+fi
+
+hdmi_audio_card=
+hdmi_audio_number=
+lpe_driver=
+if [[ -n $drm_card ]]; then
+	lpe_device="$drm_card/device/hdmi-lpe-audio"
+	lpe_driver=$(basename "$(readlink -f "$lpe_device/driver" 2>/dev/null)" 2>/dev/null || true)
+	for candidate in "$lpe_device/sound"/card[0-9]*; do
+		[[ -d $candidate && ${candidate##*/} =~ ^card([0-9]+)$ ]] || continue
+		hdmi_audio_number=${BASH_REMATCH[1]}
+		hdmi_audio_card=$(ybv_read_first "/proc/asound/card${hdmi_audio_number}/id")
+		break
+	done
+fi
+hdmi_pcm_count=0
+hdmi_pcm_nodes=0
+if [[ -n $hdmi_audio_number ]]; then
+	for info in /proc/asound/card"$hdmi_audio_number"/pcm*p/info; do
+		[[ -r $info ]] || continue
+		hdmi_pcm_count=$((hdmi_pcm_count + 1))
+	done
+	for node in /dev/snd/pcmC"$hdmi_audio_number"D*p; do
+		[[ -c $node ]] || continue
+		hdmi_pcm_nodes=$((hdmi_pcm_nodes + 1))
+	done
+fi
+if [[ $lpe_driver == hdmi-lpe-audio && $hdmi_audio_card == Audio && $hdmi_pcm_count -eq 3 && $hdmi_pcm_nodes -eq 3 ]]; then
+	ybv_emit audio hdmi-lpe PASS 'Intel LPE Micro-HDMI audio exposes all three playback PCMs' "card=$hdmi_audio_number pcms=3"
+else
+	ybv_emit audio hdmi-lpe FAIL 'Intel LPE Micro-HDMI audio transport is incomplete' "driver=${lpe_driver:-missing} card=${hdmi_audio_card:-missing} pcms=$hdmi_pcm_count nodes=$hdmi_pcm_nodes"
+fi
+
 mutter=$(ybv_mutter_state "$desktop_user" 2>>"$YBV_LOG" || true)
 dsi_mutter=$(grep '^connector=DSI-1 ' <<<"$mutter" || true)
 if [[ $dsi_mutter =~ ^connector=DSI-1\ mode=1920x1200@[^[:space:]]+\ transform=0\ primary=true\ scale=([0-9]+\.[0-9]+)$ ]]; then
