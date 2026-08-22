@@ -15,6 +15,7 @@ required=(
 	libexec/yogabook-validator-camera.sh
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
+	libexec/yogabook-validator-platform.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
 	libexec/yogabook-validator-storage.sh
 	libexec/yogabook-validator-usb.sh libexec/yogabook-validator-wireless.sh
@@ -53,7 +54,7 @@ for candidate in "$root"/src/** "$root"/libexec/** "$root"/ui/** \
 	esac
 done
 if command -v shellcheck >/dev/null; then
-	shellcheck "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
+	shellcheck -x -P "$root/libexec" "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py"
 python3 - <<PY
@@ -84,18 +85,28 @@ grep -Fq "Built-in Audio Stereo Speakers" "$root/libexec/yogabook-validator-acti
 grep -Fq 'ff.Replay(150, 0)' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'strong_magnitude=0x5000' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'YBV_ACTIVE_DISPATCH=1' "$root/libexec/yogabook-validator-active.sh"
+# The following fixed-string assertions intentionally contain literal shell syntax.
+# shellcheck disable=SC2016
 grep -Fq 'ybv_run_as_user "$real_user" mkdir -p -- "$output_dir"' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'run_subtest audio' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq 'run_subtest platform' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'include_suspend == true' "$root/libexec/yogabook-validator-automated.sh"
 for report_writer in yogabook-validator-active.sh yogabook-validator-automated.sh; do
 	finish_line=$(grep -nF 'ybv_finish_report || finish_rc=$?' "$root/libexec/$report_writer" | tail -n 1 | cut -d: -f1)
+	# shellcheck disable=SC2016
 	owner_line=$(grep -nF 'ybv_chown_tree_to_user "$real_user"' "$root/libexec/$report_writer" | tail -n 1 | cut -d: -f1)
 	[[ -n $finish_line && -n $owner_line && $finish_line -lt $owner_line ]]
 done
 grep -Fq 'finish_report_for_user || finish_rc=$?' "$root/libexec/yogabook-validator-active.sh"
+# shellcheck disable=SC2016
 grep -Fq 'chown -R -- "$user:$group" "$path"' "$root/libexec/yogabook-validator-common.sh"
-! grep -RqF 'chown -R -- "$real_user:' "$root/libexec"
+# shellcheck disable=SC2016
+if grep -RqF 'chown -R -- "$real_user:' "$root/libexec"; then
+	echo 'report ownership must use the explicit primary group helper' >&2
+	exit 1
+fi
 for report_writer in yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+	# shellcheck disable=SC2016
 	grep -Fq 'ybv_finish_report_for_user "$real_user"' "$root/libexec/$report_writer"
 done
 grep -Fq 'command_timeout = 600 if command == "automated" else 300' "$root/ui/yogabook_validator_ui.py"
@@ -104,6 +115,12 @@ grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-inputs.
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'cht_wcove_pwrsrc' "$root/libexec/yogabook-validator-power.sh"
+grep -Fq 'expected_pci_drivers' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'life_time' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'pre_eol_info' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'rtc0 wake=enabled s2idle=selected' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'AtomISP staging' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'serial numbers, CID and manufacturer fields are' "$root/README.md"
 grep -Fq 'intel_xhci_usb_sw-role-switch' "$root/libexec/yogabook-validator-usb.sh"
 grep -Fq 'removable USB accessory' "$root/libexec/yogabook-validator-usb.sh"
 grep -Fq "trap 'restore_lights || true' EXIT" "$root/libexec/yogabook-validator-lights.sh"

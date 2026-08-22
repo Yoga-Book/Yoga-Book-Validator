@@ -73,8 +73,16 @@ sky=false
 fix=false
 grep -q '"class":"SKY"' <<<"$sample" && sky=true
 grep -Eq '"mode":[23]' <<<"$sample" && fix=true
-$sky && ybv_emit gnss sky PASS 'Satellite sky data was received' || ybv_emit gnss sky WARN 'No satellite sky data was received in the bounded sample'
-$fix && ybv_emit gnss fix PASS 'A 2D or 3D GNSS fix was observed' || ybv_emit gnss fix SKIP 'No GNSS fix was observed; test outdoors with a clear sky'
+if $sky; then
+	ybv_emit gnss sky PASS 'Satellite sky data was received'
+else
+	ybv_emit gnss sky WARN 'No satellite sky data was received in the bounded sample'
+fi
+if $fix; then
+	ybv_emit gnss fix PASS 'A 2D or 3D GNSS fix was observed'
+else
+	ybv_emit gnss fix SKIP 'No GNSS fix was observed; test outdoors with a clear sky'
+fi
 
 case $requirement in
 sky) $sky || ybv_emit gnss required-sky FAIL '--require-sky was requested but no SKY report arrived' ;;

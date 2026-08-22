@@ -22,6 +22,7 @@ Commands:
   haptics                Pulse both Halo haptic actuators for 150 ms
   inputs                 Inspect kernel capabilities without reading events
   lights                 Exercise and restore panel and platform lights
+  platform               Inspect SoC, CPU, thermal, eMMC and RTC health
   power                  Validate battery, charger and desktop telemetry
   sensors                Sample every Yoga Book IIO sensor channel
   storage                Read the inserted SD card without writing to it
@@ -44,7 +45,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | camera | gnss | physical | full | bundle | power | sensors | usb)
+check | camera | gnss | physical | full | bundle | platform | power | sensors | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 audio | automated | haptics | inputs | lights | storage | suspend | wireless)

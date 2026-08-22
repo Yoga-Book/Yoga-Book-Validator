@@ -74,7 +74,6 @@ check_package yogabook-gnss gnss 1.0.1
 card_number=$(ybv_find_card_number || true)
 if [[ -n $card_number ]]; then
 	ybv_emit audio alsa-card PASS 'ALSA card ID yogabook is present' "card $card_number"
-	card_longname=$(ybv_read_first "/proc/asound/card${card_number}/id")
 	ybv_capture 'ALSA cards' cat "$(ybv_path /proc/asound/cards)"
 else
 	ybv_emit audio alsa-card FAIL 'ALSA card ID yogabook is missing'
@@ -88,8 +87,16 @@ else
 fi
 topology=$(ybv_path /lib/firmware/intel/sof-tplg/sof-cht-rt5677.tplg)
 ucm_alias=$(ybv_path /usr/share/alsa/ucm2/conf.d/SOF/LENOVO-LenovoYB1_X91L-X91L.conf)
-[[ -s $firmware ]] && ybv_emit audio sof-firmware PASS 'Effective SOF firmware is installed' "$firmware sha256=$(sha256sum "$firmware" | awk '{print $1}')" || ybv_emit audio sof-firmware FAIL 'Effective SOF firmware is missing' "$firmware"
-[[ -s $topology ]] && ybv_emit audio sof-topology PASS 'Yoga Book SOF topology is installed' "$(sha256sum "$topology" | awk '{print $1}')" || ybv_emit audio sof-topology FAIL 'SOF topology is missing' "$topology"
+if [[ -s $firmware ]]; then
+	ybv_emit audio sof-firmware PASS 'Effective SOF firmware is installed' "$firmware sha256=$(sha256sum "$firmware" | awk '{print $1}')"
+else
+	ybv_emit audio sof-firmware FAIL 'Effective SOF firmware is missing' "$firmware"
+fi
+if [[ -s $topology ]]; then
+	ybv_emit audio sof-topology PASS 'Yoga Book SOF topology is installed' "$(sha256sum "$topology" | awk '{print $1}')"
+else
+	ybv_emit audio sof-topology FAIL 'SOF topology is missing' "$topology"
+fi
 if [[ -L $ucm_alias && -e $ucm_alias ]]; then
 	ybv_emit audio ucm-alias PASS 'SOF UCM long-name alias resolves' "$(readlink "$ucm_alias")"
 else
@@ -528,6 +535,8 @@ fi
 ybv_capture 'PCI devices' lspci -nnk
 ybv_capture 'USB devices' lsusb
 ybv_capture 'Input devices' cat "$input_devices"
+# The single-quoted script intentionally expands its positional parameter in sh.
+# shellcheck disable=SC2016
 ybv_capture 'IIO devices' sh -c 'for f in "$1"/iio:device*/name; do test -r "$f" && printf "%s: " "$f" && cat "$f"; done' sh "$iio_root"
 
 ybv_finish_report

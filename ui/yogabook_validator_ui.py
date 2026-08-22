@@ -88,6 +88,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
             ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
             ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
+            ("Inspect platform", "Validate SoC drivers, CPU power, thermals, eMMC health, and RTC wake", self.on_platform, False),
             ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
             ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
@@ -150,7 +151,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_automated(self, _button) -> None:
         self.confirm(
             "Run the automated hardware suite?",
-            "The suite runs passive, sensor, power, USB, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
+            "The suite runs passive, platform, sensor, power, USB, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
             lambda: self.run_command("automated", ["--yes"]),
         )
 
@@ -208,6 +209,9 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
     def on_power(self, _button) -> None:
         self.run_command("power", [])
+
+    def on_platform(self, _button) -> None:
+        self.run_command("platform", [])
 
     def on_wireless(self, _button) -> None:
         self.confirm(

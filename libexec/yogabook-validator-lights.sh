@@ -79,7 +79,7 @@ for name in "${led_names[@]}"; do
 		ybv_finish_report
 		exit 1
 	fi
-	read -r original_brightness[$name] <"$path/brightness"
+	read -r original_brightness["$name"] <"$path/brightness"
 	original_trigger[$name]=$(current_trigger "$path/trigger")
 	[[ -n ${original_trigger[$name]} ]] || {
 		ybv_emit platform "${led_ids[$name]}" FAIL 'Could not capture the active LED trigger' "$name"

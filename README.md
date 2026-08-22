@@ -13,6 +13,8 @@ remain in their own packages.
 
 - DMI identity, running and persistent kernel selection, and current-boot
   fatal journal signatures;
+- Cherry Trail SoC drivers, CPU frequency/idle states, thermal sensors and
+  cooling devices, eMMC health, root filesystem, periodic discard and RTC wake;
 - SOF firmware/topology, the `yogabook` ALSA card, UCM devices, PipeWire and
   raw speaker state;
 - Halo keyboard/touchpad/haptics, Wacom pen and display touchscreen presence
@@ -41,7 +43,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.9.0_all.deb
+sudo apt install ../yogabook-validator_0.10.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -54,6 +56,7 @@ yogabook-validator camera
 yogabook-validator haptics
 yogabook-validator inputs
 yogabook-validator lights
+yogabook-validator platform
 yogabook-validator power
 yogabook-validator sensors
 yogabook-validator storage
@@ -103,6 +106,11 @@ charging policy. It validates health, electrical and charge-counter ranges,
 cross-checks both charger interfaces, and confirms that UPower exposes the
 battery to the desktop.
 
+The platform test reads CPU, thermal, RTC, block and kernel status without
+changing policy or power state. It reports only eMMC wear indicators and block
+properties; card identifiers, serial numbers, CID and manufacturer fields are
+never collected.
+
 The USB test validates both xHCI root hubs, the Intel role switch and the fixed
 XMM7260 `cdc_mbim` transport. It validates attached removable devices without
 logging their identity, or records SKIP when no OTG accessory is connected.
@@ -130,7 +138,9 @@ AtomISP media route, captures three frames from each sensor to `/dev/null`, and
 restores the original route. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `storage` validates an inserted SD card without
-writing. `power` validates battery, charger and UPower telemetry. `sensors`
+writing. `platform` validates the SoC driver set, CPU power management,
+thermal stack, eMMC health, root filesystem and RTC wake capability. `power`
+validates battery, charger and UPower telemetry. `sensors`
 samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control
 paths. `usb` audits the host hubs, role switch, fixed modem path, attached

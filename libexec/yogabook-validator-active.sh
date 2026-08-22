@@ -40,9 +40,9 @@ audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
 automated)
 	if [[ $include_suspend == true ]]; then
-		prompt='This suite runs every automated transport check, including camera routing, haptics, lights, wireless, storage, audible audio and an eight-second suspend/resume cycle.'
+		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, wireless, storage, audible audio and an eight-second suspend/resume cycle.'
 	else
-		prompt='This suite runs every automated transport check, including camera routing, haptics, lights, wireless, storage and audible audio; suspend remains opt-in.'
+		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, wireless, storage and audible audio; suspend remains opt-in.'
 	fi ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
@@ -308,7 +308,7 @@ PY
 	run_pcm mic-capture 'Recorded three-second Mic1 WAV' \
 		arecord -q -D hw:yogabook,0 -t wav -f S16_LE -r 48000 -c 2 -d 3 "$capture_file"
 	if [[ -s $capture_file ]]; then
-		signal=$(python3 - "$capture_file" <<'PY'
+		if signal=$(python3 - "$capture_file" <<'PY'
 import math, struct, sys, wave
 with wave.open(sys.argv[1], "rb") as wav:
     frames = wav.readframes(wav.getnframes())
@@ -318,7 +318,11 @@ rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
 print(f"peak={peak} ({peak/32768:.6f} FS), rms={rms:.2f} ({rms/32768:.6f} FS)")
 raise SystemExit(0 if peak and rms else 1)
 PY
-		) && ybv_emit audio mic-signal PASS 'Mic1 capture contains a non-empty signal' "$signal" || ybv_emit audio mic-signal FAIL 'Mic1 capture is digitally empty' "${signal:-no samples}"
+		); then
+			ybv_emit audio mic-signal PASS 'Mic1 capture contains a non-empty signal' "$signal"
+		else
+			ybv_emit audio mic-signal FAIL 'Mic1 capture is digitally empty' "${signal:-no samples}"
+		fi
 	else
 		ybv_emit audio mic-signal FAIL 'Mic1 WAV was not created'
 	fi
