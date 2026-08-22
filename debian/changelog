@@ -1,3 +1,11 @@
+yogabook-validator (0.21.0) unstable; urgency=medium
+
+  * Add a merged, no-root suite for all deep read-only validations.
+  * Expose the full passive suite through both the CLI and graphical UI.
+  * Verify Validator, Yoga Book integration and patched Mutter package files.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 22 Aug 2026 17:10:00 +0200
+
 yogabook-validator (0.20.0) unstable; urgency=medium
 
   * Keep CLI, AppStream and documented package versions aligned.

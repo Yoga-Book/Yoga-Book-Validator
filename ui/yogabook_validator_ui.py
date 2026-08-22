@@ -84,6 +84,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         for title, subtitle, callback, suggested in [
             ("Run automated suite", "All transport checks except suspend, with one authorization", self.on_automated, True),
             ("Run passive audit", "Read-only checks; no administrator access", self.on_audit, False),
+            ("Run full passive suite", "All deep read-only checks in one merged report", self.on_passive, False),
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
             ("Test cameras", "Analyze both sensors and exercise one rear-focus step", self.on_camera, False),
             ("Inspect display", "Validate i915, DSI, Micro-HDMI video/audio, and desktop policy", self.on_display, False),
@@ -156,6 +157,9 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
     def on_audit(self, _button) -> None:
         self.run_command("check", [])
+
+    def on_passive(self, _button) -> None:
+        self.run_command("passive", [])
 
     def on_automated(self, _button) -> None:
         self.confirm(

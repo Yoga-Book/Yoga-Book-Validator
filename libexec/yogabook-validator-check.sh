@@ -71,6 +71,28 @@ check_package halo-keyboard input
 check_package yogabook-sensors sensors
 check_package alsa-ucm-conf-yogabook audio 1.6
 check_package yogabook-gnss gnss 1.0.1
+check_package yogabook-validator platform "$YBV_VERSION"
+check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook2'
+
+if ybv_has_command dpkg; then
+	declare -a verify_packages=(yogabook-validator halo-keyboard yogabook-sensors yogabook-gnss alsa-ucm-conf-yogabook libmutter-18-0)
+	declare -a modified_packages=()
+	for package in "${verify_packages[@]}"; do
+		if [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true) != 'install ok installed' ]]; then
+			modified_packages+=("$package-missing")
+			continue
+		fi
+		verification=$(dpkg --verify "$package" 2>/dev/null || true)
+		[[ -z $verification ]] || modified_packages+=("$package")
+	done
+	if ((${#modified_packages[@]} == 0)); then
+		ybv_emit platform package-integrity PASS 'Installed Yoga Book and Mutter package files match dpkg checksums' "packages=${#verify_packages[@]}"
+	else
+		ybv_emit platform package-integrity FAIL 'One or more integration packages contain modified files' "packages=${modified_packages[*]}"
+	fi
+else
+	ybv_emit platform package-integrity SKIP 'dpkg file-integrity verification is unavailable'
+fi
 
 card_number=$(ybv_find_card_number || true)
 if [[ -n $card_number ]]; then

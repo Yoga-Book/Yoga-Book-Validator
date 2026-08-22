@@ -19,6 +19,7 @@ required=(
 	libexec/yogabook-validator-lights.sh
 	libexec/yogabook-validator-mode-trace.py
 	libexec/yogabook-validator-modes.sh
+	libexec/yogabook-validator-passive.sh
 	libexec/yogabook-validator-platform.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
 	libexec/yogabook-validator-storage.sh
@@ -136,6 +137,20 @@ grep -Fq 'run_subtest audio' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'run_subtest display' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'run_subtest platform' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq 'include_suspend == true' "$root/libexec/yogabook-validator-automated.sh"
+for passive_check in check platform display sensors power usb gnss; do
+	grep -Fq "run_subtest $passive_check" "$root/libexec/yogabook-validator-passive.sh"
+done
+if grep -Eq 'camera|audio|haptics|lights|storage|wireless|suspend|pkexec|sudo' "$root/libexec/yogabook-validator-passive.sh"; then
+	echo 'passive suite must contain only read-only unprivileged checks' >&2
+	exit 1
+fi
+grep -Fq 'passive                Run every read-only validation as one merged suite' "$root/src/yogabook-validator.sh"
+grep -Fq 'self.run_command("passive", [])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
+grep -Fq 'check_package yogabook-validator platform "$YBV_VERSION"' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq "check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook2'" "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'dpkg --verify "$package"' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'package-integrity PASS' "$root/libexec/yogabook-validator-check.sh"
 for report_writer in yogabook-validator-active.sh yogabook-validator-automated.sh; do
 	finish_line=$(grep -nF 'ybv_finish_report || finish_rc=$?' "$root/libexec/$report_writer" | tail -n 1 | cut -d: -f1)
 	# shellcheck disable=SC2016

@@ -12,7 +12,7 @@ remain in their own packages.
 ## What it checks
 
 - DMI identity, running and persistent kernel selection, and current-boot
-  fatal journal signatures;
+  fatal journal signatures, plus installed integration-package integrity;
 - Cherry Trail SoC drivers, CPU frequency/idle states, thermal sensors and
   cooling devices, eMMC health, root filesystem, periodic discard and RTC wake;
 - SOF firmware/topology, the `yogabook` ALSA card, UCM devices, PipeWire and
@@ -46,7 +46,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.20.0_all.deb
+sudo apt install ../yogabook-validator_0.21.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -54,6 +54,7 @@ Open **Yoga Book Validator** from the application menu, or run:
 ```bash
 yogabook-validator automated
 yogabook-validator check
+yogabook-validator passive
 yogabook-validator audio
 yogabook-validator camera
 yogabook-validator display
@@ -79,7 +80,7 @@ suspend/resume cycle is appropriate.
 
 The UI and CLI save `results.tsv` and `validator.log` under the user's results
 directory. The active audio and suspend tests ask for confirmation and Polkit
-authorization. The passive audit needs neither.
+authorization. The quick passive audit and full passive suite need neither.
 
 ## Safety model
 
@@ -175,7 +176,9 @@ identities and does not remount an existing read-only filesystem.
 ## Commands
 
 `automated` runs every non-suspend automated check and merges its reports.
-`check` performs the read-only full-stack audit. `audio` tests PCM0 playback and
+`check` performs the quick read-only full-stack audit. `passive` merges the
+quick audit with the deeper platform, display, sensor, power, USB and GNSS
+checks without administrator access or state changes. `audio` tests PCM0 playback and
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, validates three in-memory frames from each sensor for

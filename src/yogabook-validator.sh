@@ -17,6 +17,7 @@ Usage: yogabook-validator COMMAND [OPTIONS]
 Commands:
   automated              Run all non-suspend automated validation
   check                  Run the passive full-stack audit
+  passive                Run every read-only validation as one merged suite
   audio                  Run state-safe audio transport and signal tests
   camera                 Stream three frames from both cameras and restore route
   display                Inspect i915, DSI, Mutter and desktop display policy
@@ -35,7 +36,7 @@ Commands:
   wireless               Test Wi-Fi gateway and bounded Bluetooth discovery
   gnss [OPTIONS]         Inspect GNSS; optionally require sky or a fix
   physical               Record guided physical acceptance
-  full                   Run passive audit, then guided physical acceptance
+  full                   Run full passive suite, then physical acceptance
   bundle DIRECTORY       Create a compressed support bundle
   ui                     Open the graphical validator
   version                Print the installed version
@@ -49,7 +50,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | camera | display | gnss | physical | full | bundle | platform | power | sensors | usb)
+check | camera | display | gnss | passive | physical | full | bundle | platform | power | sensors | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 audio | automated | haptics | inputs | lights | modes | rotation | storage | storage-write | suspend | wireless)
