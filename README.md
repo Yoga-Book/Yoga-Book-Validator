@@ -96,8 +96,9 @@ data.
 The camera test records which AtomISP sensor links were active, captures three
 frames from each sensor into bounded process memory, checks complete payloads,
 luminance variation and frame-to-frame change, then immediately discards the
-bytes. It restores the original links on success, failure, interruption, or
-timeout and never stores or logs an image.
+bytes. It also moves the WV517S rear focus actuator by one position and restores
+the original position. It restores focus and links on success, failure,
+interruption, or timeout and never stores or logs an image.
 
 The sensor test reads every raw ALS, accelerometer, hinge-angle and proximity
 channel and confirms that SensorProxy returns live desktop values. The lights
@@ -164,7 +165,8 @@ identities and does not remount an existing read-only filesystem.
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, validates three in-memory frames from each sensor for
-payload and signal integrity, discards them and restores the original route.
+payload and signal integrity, exercises one bounded rear-focus step, discards
+the frames and restores the original focus and route.
 `display` inspects the live i915, DSI, Mutter and
 GNOME Shell display stack without changing it. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without

@@ -19,7 +19,7 @@ done
 
 if [[ $assume_yes != true ]]; then
 	[[ -t 0 ]] || { echo 'ERROR: confirmation is required; use --yes after reviewing the operation' >&2; exit 2; }
-	printf '%s' 'This test briefly switches the AtomISP route, analyzes three frames from each camera in memory without saving images, and restores the original route. Continue? [y/N] '
+	printf '%s' 'This test briefly switches the AtomISP route, analyzes three frames from each camera in memory, moves rear focus by one step, and restores all state without saving images. Continue? [y/N] '
 	read -r answer
 	[[ $answer == y || $answer == Y || $answer == yes || $answer == YES ]] || exit 2
 fi
@@ -57,6 +57,12 @@ for identity in 'ov2740 2-0010' 'ov8858 2-0036'; do
 		ybv_emit camera "sensor-${identity%% *}" FAIL "$identity is missing from the media graph"
 	fi
 done
+focus_device=$(sed -n '/entity .*: wv517s 2-000c/,/^- entity /s/.*device node name \(\/dev\/v4l-subdev[0-9][0-9]*\).*/\1/p' <<<"$media_graph" | head -n 1)
+if [[ -n $focus_device && -e $focus_device ]]; then
+	ybv_emit camera focus-actuator PASS 'WV517S rear-camera focus actuator is present' "$focus_device"
+else
+	ybv_emit camera focus-actuator FAIL 'WV517S rear-camera focus actuator is missing'
+fi
 printf '\n===== Original media topology =====\n%s\n' "$media_graph" >>"$YBV_LOG"
 
 link_enabled() {
@@ -87,7 +93,24 @@ restore_route() {
 	if [[ $rear_was_enabled == true ]]; then set_link 1 1 || restore_rc=1; fi
 	return "$restore_rc"
 }
-trap 'restore_route || true' EXIT
+focus_original=
+focus_changed=false
+restore_focus() {
+	local restored
+	[[ $focus_changed == true ]] || return 0
+	v4l2-ctl -d "$focus_device" --set-ctrl="focus_absolute=$focus_original" >>"$YBV_LOG" 2>&1 || return 1
+	restored=$(v4l2-ctl -d "$focus_device" --get-ctrl=focus_absolute 2>>"$YBV_LOG" |
+		sed -n 's/^focus_absolute:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p')
+	[[ $restored == "$focus_original" ]] || return 1
+	focus_changed=false
+}
+restore_camera_state() {
+	local restore_rc=0
+	restore_focus || restore_rc=1
+	restore_route || restore_rc=1
+	return "$restore_rc"
+}
+trap 'restore_camera_state || true' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -135,10 +158,60 @@ test_camera() {
 	esac
 }
 
+test_focus() {
+	local control_info minimum maximum step target changed
+	if [[ -z $focus_device || ! -e $focus_device ]]; then
+		ybv_emit camera focus-control FAIL 'Rear-camera focus control could not be exercised'
+		return
+	fi
+	control_info=$(v4l2-ctl -d "$focus_device" --list-ctrls 2>>"$YBV_LOG" |
+		sed -n '/focus_absolute/p' | head -n 1)
+	if [[ $control_info =~ min=(-?[0-9]+).*max=(-?[0-9]+).*step=([0-9]+) ]]; then
+		minimum=${BASH_REMATCH[1]}
+		maximum=${BASH_REMATCH[2]}
+		step=${BASH_REMATCH[3]}
+	else
+		ybv_emit camera focus-control FAIL 'Rear-camera focus range is unavailable'
+		return
+	fi
+	focus_original=$(v4l2-ctl -d "$focus_device" --get-ctrl=focus_absolute 2>>"$YBV_LOG" |
+		sed -n 's/^focus_absolute:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p')
+	if [[ ! $focus_original =~ ^-?[0-9]+$ || $step -le 0 ]]; then
+		ybv_emit camera focus-control FAIL 'Rear-camera focus position is invalid' "value=${focus_original:-unreadable}"
+		return
+	fi
+	if ((focus_original + step <= maximum)); then
+		target=$((focus_original + step))
+	elif ((focus_original - step >= minimum)); then
+		target=$((focus_original - step))
+	else
+		ybv_emit camera focus-control FAIL 'Rear-camera focus range has no safe adjacent step' "min=$minimum max=$maximum value=$focus_original step=$step"
+		return
+	fi
+	focus_changed=true
+	if v4l2-ctl -d "$focus_device" --set-ctrl="focus_absolute=$target" >>"$YBV_LOG" 2>&1; then
+		changed=$(v4l2-ctl -d "$focus_device" --get-ctrl=focus_absolute 2>>"$YBV_LOG" |
+			sed -n 's/^focus_absolute:[[:space:]]*\(-\{0,1\}[0-9][0-9]*\).*/\1/p')
+	else
+		changed=
+	fi
+	if [[ $changed == "$target" ]]; then
+		ybv_emit camera focus-control PASS 'Rear-camera focus accepted one bounded step' "$focus_original->$target range=$minimum..$maximum"
+	else
+		ybv_emit camera focus-control FAIL 'Rear-camera focus did not accept one bounded step' "expected=$target actual=${changed:-unreadable}"
+	fi
+	if restore_focus; then
+		ybv_emit camera focus-restore PASS 'Restored the original rear-camera focus position' "$focus_original"
+	else
+		ybv_emit camera focus-restore FAIL 'Could not restore the original rear-camera focus position' "$focus_original"
+	fi
+}
+
 test_camera front 'Front camera' 0 ov2740
 test_camera rear 'Rear camera' 1 ov8858
+test_focus
 
-if restore_route; then
+if restore_camera_state; then
 	ybv_emit camera route-restore PASS 'Restored the original AtomISP camera route' "front=$front_was_enabled rear=$rear_was_enabled"
 	trap - EXIT INT TERM
 else

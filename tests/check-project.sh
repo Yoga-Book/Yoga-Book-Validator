@@ -184,7 +184,12 @@ if grep -Fq 'discovery_output" >>"$YBV_LOG"' "$root/libexec/yogabook-validator-w
 	echo 'raw Bluetooth discovery output must not be written to reports or logs' >&2
 	exit 1
 fi
-grep -Fq 'restore_route || true' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'restore_route || restore_rc=1' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq "trap 'restore_camera_state || true' EXIT" "$root/libexec/yogabook-validator-camera.sh"
+# shellcheck disable=SC2016
+grep -Fq 'focus_absolute=$target' "$root/libexec/yogabook-validator-camera.sh"
+# shellcheck disable=SC2016
+grep -Fq 'focus_absolute=$focus_original' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq 'yogabook-validator-camera-capture.py' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq -- '--stream-to=-' "$root/libexec/yogabook-validator-camera-capture.py"
 grep -Fq 'actual_frame_bytes=' "$root/libexec/yogabook-validator-camera-capture.py"

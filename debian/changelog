@@ -1,3 +1,10 @@
+yogabook-validator (0.16.0) unstable; urgency=medium
+
+  * Validate the WV517S rear-camera focus control path.
+  * Move focus by one bounded step and restore its original position.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 05:42:00 +0200
+
 yogabook-validator (0.15.0) unstable; urgency=medium
 
   * Analyze complete camera frames in bounded process memory.
