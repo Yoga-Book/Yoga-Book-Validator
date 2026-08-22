@@ -87,6 +87,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
             ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
             ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
+            ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
             ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
             ("Test wireless", "Verify Wi-Fi gateway transport and briefly scan with Bluetooth", self.on_wireless, False),
@@ -195,6 +196,9 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
     def on_sensors(self, _button) -> None:
         self.run_command("sensors", [])
+
+    def on_power(self, _button) -> None:
+        self.run_command("power", [])
 
     def on_wireless(self, _button) -> None:
         self.confirm(

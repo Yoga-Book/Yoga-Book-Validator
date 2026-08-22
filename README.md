@@ -21,6 +21,7 @@ remain in their own packages.
 - Wi-Fi, Bluetooth, eMMC, SD slot/card, USB, DSI display and platform LEDs;
 - XMM7260/ModemManager, adapting expectations when no SIM is installed;
 - GNSS transport, both camera sensors, battery and charging;
+- BQ27542 fuel-gauge, BQ25892 charger and UPower telemetry consistency;
 - direct PCM formats, microphone signal and audio across suspend/resume;
 - live data from every IIO sensor channel and state-restoring panel, Halo,
   indicator and charging light controls;
@@ -39,7 +40,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.6.0_all.deb
+sudo apt install ../yogabook-validator_0.7.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -51,6 +52,7 @@ yogabook-validator camera
 yogabook-validator haptics
 yogabook-validator inputs
 yogabook-validator lights
+yogabook-validator power
 yogabook-validator sensors
 yogabook-validator storage
 yogabook-validator suspend 8
@@ -90,6 +92,11 @@ The input-capability test opens event nodes read-only and validates the key,
 switch, absolute-axis and force-feedback features exposed by the kernel. It
 does not grab devices, monitor events, record user input or inject events.
 
+The power test reads the battery fuel gauge and charger without changing any
+charging policy. It validates health, electrical and charge-counter ranges,
+cross-checks both charger interfaces, and confirms that UPower exposes the
+battery to the desktop.
+
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
 the original Bluetooth power and rfkill state. Nearby device identities are
@@ -107,7 +114,8 @@ AtomISP media route, captures three frames from each sensor to `/dev/null`, and
 restores the original route. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `storage` validates an inserted SD card without
-writing. `sensors` samples the complete IIO layout and SensorProxy. `lights`
+writing. `power` validates battery, charger and UPower telemetry. `sensors`
+samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control
 paths. `wireless` checks the current Wi-Fi gateway and bounded Bluetooth
 discovery while restoring radio state. `suspend` keeps silent

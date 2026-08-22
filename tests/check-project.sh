@@ -14,7 +14,8 @@ required=(
 	libexec/yogabook-validator-active.sh libexec/yogabook-validator-camera.sh
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
-	libexec/yogabook-validator-sensors.sh libexec/yogabook-validator-storage.sh
+	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
+	libexec/yogabook-validator-storage.sh
 	libexec/yogabook-validator-wireless.sh
 	libexec/yogabook-validator-physical.sh libexec/yogabook-validator-full.sh
 	libexec/yogabook-validator-bundle.sh ui/yogabook_validator_ui.py
@@ -86,6 +87,8 @@ grep -Fq 'ybv_run_as_user "$real_user" mkdir -p -- "$output_dir"' "$root/libexec
 grep -Fq 'does not grab devices' "$root/README.md"
 grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"
+grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"
+grep -Fq 'cht_wcove_pwrsrc' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq "trap 'restore_lights || true' EXIT" "$root/libexec/yogabook-validator-lights.sh"
 grep -Fq "declare -A expected_counts=([als]=2 [accel_3d]=4 [hinge]=2 [sx9310]=1)" "$root/libexec/yogabook-validator-sensors.sh"
 grep -Fq 'mount_options=ro,nodev,nosuid,noexec' "$root/libexec/yogabook-validator-storage.sh"
