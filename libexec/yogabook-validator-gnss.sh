@@ -19,6 +19,10 @@ while (($#)); do
 done
 
 ybv_begin_report gnss "$output_dir"
+restart_count_before=
+if ybv_has_command systemctl; then
+	restart_count_before=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
+fi
 gnss_nodes=()
 for node in /dev/gnss* /dev/ttyGPS* /dev/ttyS5; do [[ -e $node ]] && gnss_nodes+=("$node"); done
 if ((${#gnss_nodes[@]})); then
@@ -51,6 +55,16 @@ if ybv_has_command yogabook-gnss-health; then
 		ybv_emit gnss required-fix FAIL 'A 2D/3D GNSS fix was required but unavailable'
 	else
 		ybv_emit gnss fix SKIP 'No GNSS fix was observed; test outdoors with a clear sky'
+	fi
+	restart_count_after=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
+	if [[ $restart_count_before =~ ^[0-9]+$ && $restart_count_after =~ ^[0-9]+$ ]]; then
+		if ((restart_count_after == restart_count_before)); then
+			ybv_emit gnss service-stability PASS 'GNSS transport did not restart during the bounded health capture' "historical-restarts=$restart_count_after"
+		else
+			ybv_emit gnss service-stability FAIL 'GNSS transport restarted during the bounded health capture' "before=$restart_count_before after=$restart_count_after"
+		fi
+	else
+		ybv_emit gnss service-stability SKIP 'GNSS service restart counter is unavailable'
 	fi
 	ybv_finish_report
 	exit

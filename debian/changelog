@@ -1,3 +1,9 @@
+yogabook-validator (0.21.1) unstable; urgency=medium
+
+  * Detect GNSS transport restarts during bounded health validation.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 22 Aug 2026 17:20:00 +0200
+
 yogabook-validator (0.21.0) unstable; urgency=medium
 
   * Add a merged, no-root suite for all deep read-only validations.

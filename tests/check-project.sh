@@ -151,6 +151,9 @@ grep -Fq 'check_package yogabook-validator platform "$YBV_VERSION"' "$root/libex
 grep -Fq "check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook2'" "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'dpkg --verify "$package"' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'package-integrity PASS' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'restart_count_before=' "$root/libexec/yogabook-validator-gnss.sh"
+grep -Fq 'service-stability PASS' "$root/libexec/yogabook-validator-gnss.sh"
+grep -Fq 'service-stability FAIL' "$root/libexec/yogabook-validator-gnss.sh"
 for report_writer in yogabook-validator-active.sh yogabook-validator-automated.sh; do
 	finish_line=$(grep -nF 'ybv_finish_report || finish_rc=$?' "$root/libexec/$report_writer" | tail -n 1 | cut -d: -f1)
 	# shellcheck disable=SC2016
