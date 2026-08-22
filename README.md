@@ -21,6 +21,8 @@ remain in their own packages.
 - XMM7260/ModemManager, adapting expectations when no SIM is installed;
 - GNSS transport, both camera sensors, battery and charging;
 - direct PCM formats, microphone signal and audio across suspend/resume;
+- live data from every IIO sensor channel and state-restoring panel, Halo,
+  indicator and charging light controls;
 - guided physical acceptance for behavior software cannot prove.
 
 Automated results never imply that a speaker, microphone, pen, camera, sensor,
@@ -36,7 +38,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.4.0_all.deb
+sudo apt install ../yogabook-validator_0.5.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -46,6 +48,8 @@ yogabook-validator check
 yogabook-validator audio
 yogabook-validator camera
 yogabook-validator haptics
+yogabook-validator lights
+yogabook-validator sensors
 yogabook-validator storage
 yogabook-validator suspend 8
 yogabook-validator wireless
@@ -75,6 +79,11 @@ The camera test records which AtomISP sensor links were active, streams only to
 `/dev/null`, and restores the original links on success, failure, interruption,
 or timeout. It never stores an image.
 
+The sensor test reads every raw ALS, accelerometer, hinge-angle and proximity
+channel and confirms that SensorProxy returns live desktop values. The lights
+test changes each brightness by only one step, then restores the panel and all
+LED brightness and trigger values even if the test is interrupted.
+
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
 the original Bluetooth power and rfkill state. Nearby device identities are
@@ -91,7 +100,9 @@ playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, captures three frames from each sensor to `/dev/null`, and
 restores the original route. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `storage` validates an inserted SD card without
-writing. `wireless` checks the current Wi-Fi gateway and bounded Bluetooth
+writing. `sensors` samples the complete IIO layout and SensorProxy. `lights`
+exercises and restores the display, Halo, indicator and charging light control
+paths. `wireless` checks the current Wi-Fi gateway and bounded Bluetooth
 discovery while restoring radio state. `suspend` keeps silent
 full-duplex audio active across one suspend. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`

@@ -36,6 +36,8 @@ audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
+lights)
+	prompt='This test makes one-step changes to panel and platform light brightness, then restores every brightness and trigger value.' ;;
 storage)
 	prompt='This test reads the inserted SD card and mounts its filesystems read-only, then restores their original mount state.' ;;
 suspend)
@@ -55,7 +57,7 @@ fi
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 if [[ $action == haptics ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
-elif [[ $action == storage || $action == wireless ]]; then
+elif [[ $action == lights || $action == storage || $action == wireless ]]; then
 	:
 else
 	for required in alsactl alsaucm aplay arecord timeout python3; do
@@ -80,9 +82,13 @@ if [[ -n $real_user ]]; then
 	*) echo 'ERROR: active report output must be inside the invoking user home or private /var/tmp results directory' >&2; exit 2 ;;
 	esac
 	output_dir=$canonical_output
+	if ! ybv_run_as_user "$real_user" mkdir -p -- "$output_dir"; then
+		echo 'ERROR: invoking user cannot create the active report directory' >&2
+		exit 2
+	fi
 fi
 
-if [[ $action == storage || $action == wireless ]]; then
+if [[ $action == lights || $action == storage || $action == wireless ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-$action.sh" --output "$output_dir"
 fi
 

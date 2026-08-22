@@ -85,6 +85,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
             ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
+            ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
+            ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
             ("Test wireless", "Verify Wi-Fi gateway transport and briefly scan with Bluetooth", self.on_wireless, False),
             ("Test suspend", "Full-duplex audio across one suspend/resume cycle", self.on_suspend, False),
@@ -175,6 +177,16 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "The validator reads the first 4 MiB and mounts recognized filesystems read-only. It does not write to the card and removes every temporary mount.",
             lambda: self.run_command("storage", ["--yes"]),
         )
+
+    def on_lights(self, _button) -> None:
+        self.confirm(
+            "Test panel and platform lights?",
+            "The validator applies a one-step brightness change to the display backlight and each Yoga Book LED, then restores all brightness and trigger values. Administrator authorization is required.",
+            lambda: self.run_command("lights", ["--yes"]),
+        )
+
+    def on_sensors(self, _button) -> None:
+        self.run_command("sensors", [])
 
     def on_wireless(self, _button) -> None:
         self.confirm(
