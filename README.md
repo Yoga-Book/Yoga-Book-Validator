@@ -18,7 +18,8 @@ remain in their own packages.
 - Halo keyboard/touchpad/haptics, Wacom pen and display touchscreen presence
   and kernel capability maps;
 - the exact Halo keyboard, touchpad, dual-haptic and IIO sensor layout;
-- Wi-Fi, Bluetooth, eMMC, SD slot/card, USB, DSI display and platform LEDs;
+- Wi-Fi, Bluetooth, eMMC, SD slot/card, xHCI/USB role and device topology,
+  DSI display and platform LEDs;
 - XMM7260/ModemManager, adapting expectations when no SIM is installed;
 - GNSS transport, both camera sensors, battery and charging;
 - BQ27542 fuel-gauge, BQ25892 charger and UPower telemetry consistency;
@@ -40,7 +41,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.7.0_all.deb
+sudo apt install ../yogabook-validator_0.8.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -56,6 +57,7 @@ yogabook-validator power
 yogabook-validator sensors
 yogabook-validator storage
 yogabook-validator suspend 8
+yogabook-validator usb
 yogabook-validator wireless
 yogabook-validator gnss
 yogabook-validator physical
@@ -97,6 +99,10 @@ charging policy. It validates health, electrical and charge-counter ranges,
 cross-checks both charger interfaces, and confirms that UPower exposes the
 battery to the desktop.
 
+The USB test validates both xHCI root hubs, the Intel role switch and the fixed
+XMM7260 `cdc_mbim` transport. It validates attached removable devices without
+logging their identity, or records SKIP when no OTG accessory is connected.
+
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
 the original Bluetooth power and rfkill state. Nearby device identities are
@@ -117,8 +123,9 @@ reading events. `storage` validates an inserted SD card without
 writing. `power` validates battery, charger and UPower telemetry. `sensors`
 samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control
-paths. `wireless` checks the current Wi-Fi gateway and bounded Bluetooth
-discovery while restoring radio state. `suspend` keeps silent
+paths. `usb` audits the host hubs, role switch, fixed modem path, attached
+accessories and targeted kernel errors. `wireless` checks the current Wi-Fi
+gateway and bounded Bluetooth discovery while restoring radio state. `suspend` keeps silent
 full-duplex audio active across one suspend. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`
 compresses an existing report directory while excluding sensitive artifacts.

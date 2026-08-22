@@ -1,3 +1,11 @@
+yogabook-validator (0.8.0) unstable; urgency=medium
+
+  * Validate xHCI root hubs, USB role switch and fixed XMM transport.
+  * Adapt removable-device expectations when no OTG accessory is attached.
+  * Scan the current boot for targeted USB controller and enumeration errors.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 02:29:00 +0200
+
 yogabook-validator (0.7.0) unstable; urgency=medium
 
   * Validate battery health, charge counters and electrical telemetry.

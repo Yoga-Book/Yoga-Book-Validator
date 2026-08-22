@@ -90,6 +90,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
             ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
+            ("Inspect USB", "Validate xHCI hubs, role switch, modem transport, and attached accessories", self.on_usb, False),
             ("Test wireless", "Verify Wi-Fi gateway transport and briefly scan with Bluetooth", self.on_wireless, False),
             ("Test suspend", "Full-duplex audio across one suspend/resume cycle", self.on_suspend, False),
             ("Physical acceptance", "Record what you can hear, touch, and observe", self.on_physical, False),
@@ -206,6 +207,9 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "The validator pings the Wi-Fi gateway, briefly enables Bluetooth discovery without pairing, then restores the original Bluetooth power and rfkill state.",
             lambda: self.run_command("wireless", ["--yes"]),
         )
+
+    def on_usb(self, _button) -> None:
+        self.run_command("usb", [])
 
     def run_command(self, command: str, extra: list[str], output: Path | None = None) -> None:
         output = output or self.report_path(command)

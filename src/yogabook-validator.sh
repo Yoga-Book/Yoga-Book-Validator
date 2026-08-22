@@ -25,6 +25,7 @@ Commands:
   sensors                Sample every Yoga Book IIO sensor channel
   storage                Read the inserted SD card without writing to it
   suspend [SECONDS]      Run active audio across one suspend/resume cycle
+  usb                    Inspect USB hubs, role switch and device transport
   wireless               Test Wi-Fi gateway and bounded Bluetooth discovery
   gnss [OPTIONS]         Inspect GNSS; optionally require sky or a fix
   physical               Record guided physical acceptance
@@ -42,7 +43,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | camera | gnss | physical | full | bundle | power | sensors)
+check | camera | gnss | physical | full | bundle | power | sensors | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 audio | haptics | inputs | lights | storage | suspend | wireless)
