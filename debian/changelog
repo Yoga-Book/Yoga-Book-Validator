@@ -1,3 +1,12 @@
+yogabook-validator (0.14.0) unstable; urgency=medium
+
+  * Validate classic Bluetooth, LE, security and advertising capabilities.
+  * Validate real over-the-air discovery reports when nearby peers are present.
+  * Discard all discovered Bluetooth identities from evidence and logs.
+  * Discover internal eMMC by device type when an SD card enumerates first.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 05:03:00 +0200
+
 yogabook-validator (0.13.0) unstable; urgency=medium
 
   * Add a separately confirmed bounded SD write/read/delete validation.

@@ -82,6 +82,21 @@ fi
 initial_power=$(bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
 [[ $initial_power == yes || $initial_power == no ]] || initial_power=no
 
+controller_info=$(btmgmt --index "$controller_index" info 2>/dev/null || true)
+supported_settings=$(sed -n 's/^[[:space:]]*supported settings: //p' <<<"$controller_info" | head -n 1)
+required_settings=(powered connectable discoverable bondable ssp br/edr le advertising secure-conn privacy phy-configuration)
+missing_settings=()
+for setting in "${required_settings[@]}"; do
+	if [[ " $supported_settings " != *" $setting "* ]]; then
+		missing_settings+=("$setting")
+	fi
+done
+if ((${#missing_settings[@]} == 0)); then
+	ybv_emit wireless bluetooth-features PASS 'Bluetooth controller supports classic, LE and modern security features' 'BR/EDR LE SSP secure-connections advertising privacy'
+else
+	ybv_emit wireless bluetooth-features FAIL 'Bluetooth controller feature set is incomplete' "missing=${missing_settings[*]}"
+fi
+
 restore_wireless() {
 	local restore_rc=0 current_soft current_power
 	btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
@@ -133,6 +148,14 @@ if grep -Fq 'Discovery started' <<<"$discovery_output"; then
 	ybv_emit wireless bluetooth-scan PASS 'Bluetooth discovery entered the active state' 'bounded scan'
 else
 	ybv_emit wireless bluetooth-scan FAIL 'Bluetooth discovery did not enter the active state'
+fi
+discovery_reports=$(grep -c ' dev_found:' <<<"$discovery_output" || true)
+if ((discovery_reports > 0)); then
+	ybv_emit wireless bluetooth-rf PASS 'Bluetooth received over-the-air discovery reports' "reports=$discovery_reports identities=discarded"
+elif grep -Fq 'Discovery started' <<<"$discovery_output"; then
+	ybv_emit wireless bluetooth-rf WARN 'Bluetooth scan completed but no nearby peer was observed' 'identities=discarded'
+else
+	ybv_emit wireless bluetooth-rf FAIL 'Bluetooth RF reception could not be exercised'
 fi
 btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
 

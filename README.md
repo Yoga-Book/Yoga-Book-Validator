@@ -45,7 +45,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.13.0_all.deb
+sudo apt install ../yogabook-validator_0.14.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -142,7 +142,9 @@ evidence. Suspend remains opt-in.
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
 the original Bluetooth power and rfkill state. Nearby device identities are
-discarded rather than written to reports. The storage test performs a
+discarded rather than written to reports. It validates classic Bluetooth, LE,
+security, advertising, privacy and PHY-management capabilities, and reports
+only the number of received RF discovery events. The storage test performs a
 bounded raw read and mounts recognized SD filesystems with read-only, nodev,
 nosuid and noexec options. It never writes to removable media and removes every
 temporary mount in its exit trap.
@@ -174,7 +176,8 @@ samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control
 paths. `usb` audits the host hubs, role switch, fixed modem path, attached
 accessories and targeted kernel errors. `wireless` checks the current Wi-Fi
-gateway and bounded Bluetooth discovery while restoring radio state. `suspend` keeps silent
+gateway, Bluetooth controller features and bounded RF discovery while
+restoring radio state. `suspend` keeps silent
 full-duplex audio active across one suspend. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`
 compresses an existing report directory while excluding sensitive artifacts.

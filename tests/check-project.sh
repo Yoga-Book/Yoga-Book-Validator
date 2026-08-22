@@ -148,6 +148,12 @@ grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.s
 grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'cht_wcove_pwrsrc' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'expected_pci_drivers' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'emmc_candidates=()' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq '== MMC' "$root/libexec/yogabook-validator-platform.sh"
+if grep -Fq 'emmc=/sys/class/block/mmcblk0' "$root/libexec/yogabook-validator-platform.sh"; then
+	echo 'platform validation must discover eMMC by device type, not enumeration order' >&2
+	exit 1
+fi
 grep -Fq 'life_time' "$root/libexec/yogabook-validator-platform.sh"
 grep -Fq 'pre_eol_info' "$root/libexec/yogabook-validator-platform.sh"
 grep -Fq 'rtc0 wake=enabled s2idle=selected' "$root/libexec/yogabook-validator-platform.sh"
@@ -169,6 +175,14 @@ if grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-automa
 	exit 1
 fi
 grep -Fq 'restore_wireless || true' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'required_settings=(powered connectable discoverable bondable ssp br/edr le advertising secure-conn privacy phy-configuration)' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq "grep -c ' dev_found:'" "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'identities=discarded' "$root/libexec/yogabook-validator-wireless.sh"
+# shellcheck disable=SC2016
+if grep -Fq 'discovery_output" >>"$YBV_LOG"' "$root/libexec/yogabook-validator-wireless.sh"; then
+	echo 'raw Bluetooth discovery output must not be written to reports or logs' >&2
+	exit 1
+fi
 grep -Fq 'restore_route || true' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq -- '--stream-to=/dev/null' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq 'src" / "yogabook-validator.sh"' "$root/ui/yogabook_validator_ui.py"

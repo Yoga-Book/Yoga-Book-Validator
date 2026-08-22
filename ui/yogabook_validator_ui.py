@@ -96,7 +96,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
             ("Test SD writes", "Write, verify, synchronize, and remove a bounded test file", self.on_storage_write, False),
             ("Inspect USB", "Validate xHCI hubs, role switch, modem transport, and attached accessories", self.on_usb, False),
-            ("Test wireless", "Verify Wi-Fi gateway transport and briefly scan with Bluetooth", self.on_wireless, False),
+            ("Test wireless", "Verify Wi-Fi plus Bluetooth features and RF reception", self.on_wireless, False),
             ("Test suspend", "Full-duplex audio across one suspend/resume cycle", self.on_suspend, False),
             ("Physical acceptance", "Record what you can hear, touch, and observe", self.on_physical, False),
         ]:
@@ -240,7 +240,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_wireless(self, _button) -> None:
         self.confirm(
             "Test Wi-Fi and Bluetooth?",
-            "The validator pings the Wi-Fi gateway, briefly enables Bluetooth discovery without pairing, then restores the original Bluetooth power and rfkill state.",
+            "The validator pings the Wi-Fi gateway, validates classic/LE Bluetooth features, and briefly scans for RF reports without retaining device identities or pairing. It then restores the original Bluetooth power and rfkill state.",
             lambda: self.run_command("wireless", ["--yes"]),
         )
 

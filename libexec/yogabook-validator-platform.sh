@@ -146,16 +146,23 @@ else
 	ybv_emit platform thermal-cooling FAIL 'Thermal cooling-device coverage or state is incomplete' "processor=$processor_cooling powerclamp=$powerclamp_cooling charger=$charge_cooling invalid=$invalid_cooling"
 fi
 
-emmc=/sys/class/block/mmcblk0
+declare -a emmc_candidates=()
+for block_device in /sys/class/block/mmcblk*; do
+	[[ -d $block_device ]] || continue
+	[[ $(read_value "$block_device/device/type" 2>/dev/null || true) == MMC ]] || continue
+	emmc_candidates+=("$block_device")
+done
+emmc=${emmc_candidates[0]:-}
+emmc_name=${emmc##*/}
 emmc_type=$(read_value "$emmc/device/type" 2>/dev/null || true)
 read_only=$(read_integer "$emmc/ro" 2>/dev/null || true)
 removable=$(read_integer "$emmc/removable" 2>/dev/null || true)
 rotational=$(read_integer "$emmc/queue/rotational" 2>/dev/null || true)
 discard_max=$(read_integer "$emmc/queue/discard_max_bytes" 2>/dev/null || true)
-if [[ $emmc_type == MMC && $read_only == 0 && $removable == 0 && $rotational == 0 && -n $discard_max ]] && ((discard_max > 0)); then
-	ybv_emit storage emmc-transport PASS 'Internal eMMC is writable, non-removable and discard-capable' 'mmcblk0'
+if ((${#emmc_candidates[@]} == 1)) && [[ $emmc_type == MMC && $read_only == 0 && $removable == 0 && $rotational == 0 && -n $discard_max ]] && ((discard_max > 0)); then
+	ybv_emit storage emmc-transport PASS 'Internal eMMC is writable, non-removable and discard-capable' "$emmc_name"
 else
-	ybv_emit storage emmc-transport FAIL 'Internal eMMC block transport attributes are invalid' "type=${emmc_type:-unreadable} ro=${read_only:-unreadable} removable=${removable:-unreadable} rotational=${rotational:-unreadable} discard=${discard_max:-unreadable}"
+	ybv_emit storage emmc-transport FAIL 'Internal eMMC discovery or block transport attributes are invalid' "candidates=${#emmc_candidates[@]} type=${emmc_type:-unreadable} ro=${read_only:-unreadable} removable=${removable:-unreadable} rotational=${rotational:-unreadable} discard=${discard_max:-unreadable}"
 fi
 
 life_time=$(read_value "$emmc/device/life_time" 2>/dev/null || true)
@@ -180,7 +187,7 @@ fi
 
 root_mount=$(findmnt -rn -o SOURCE,FSTYPE,OPTIONS / 2>/dev/null || true)
 read -r root_source root_fstype root_options <<<"$root_mount"
-if [[ $root_source == /dev/mmcblk0p* && $root_fstype == ext4 && ,$root_options, == *,rw,* ]]; then
+if [[ -n $emmc_name && $root_source == /dev/"${emmc_name}"p* && $root_fstype == ext4 && ,$root_options, == *,rw,* ]]; then
 	ybv_emit storage root-filesystem PASS 'Root filesystem is mounted read-write from internal eMMC' "$root_source $root_fstype"
 else
 	ybv_emit storage root-filesystem FAIL 'Root filesystem is not a read-write ext4 volume on internal eMMC' "${root_mount:-unreadable}"
@@ -234,7 +241,7 @@ fi
 
 if ybv_has_command journalctl; then
 	journal_errors=$(journalctl -b -k --no-pager 2>/dev/null | grep -Ei \
-		'(mmcblk0|mmc0).*(I/O error|timed out|timeout|CRC error)|EXT4-fs error|remounting filesystem read-only|i915.*(GPU HANG|wedged|reset failed)|thermal.*(critical|trip.*failed)|watchdog: BUG: soft lockup|rcu:.*stall' || true)
+		'(mmcblk[0-9]+|mmc[0-9]+).*(I/O error|timed out|timeout|CRC error)|EXT4-fs error|remounting filesystem read-only|i915.*(GPU HANG|wedged|reset failed)|thermal.*(critical|trip.*failed)|watchdog: BUG: soft lockup|rcu:.*stall' || true)
 	if [[ -z $journal_errors ]]; then
 		ybv_emit platform kernel-errors PASS 'No targeted storage, GPU, thermal or lockup errors occurred in this boot'
 	else
