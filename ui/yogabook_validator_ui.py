@@ -15,7 +15,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango  # noqa: E402
 
 
 APP_ID = "org.yogabook.Validator"
@@ -87,6 +87,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
             ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
+            ("Test keyboard/pen modes", "Observe one physical keyboard to pen to keyboard transition", self.on_modes, False),
             ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
             ("Inspect platform", "Validate SoC drivers, CPU power, thermals, eMMC health, and RTC wake", self.on_platform, False),
             ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
@@ -130,6 +131,10 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.spinner = Gtk.Spinner()
         self.spinner.set_visible(False)
         header.pack_start(self.spinner)
+        self.action_label = Gtk.Label()
+        self.action_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.action_label.set_visible(False)
+        header.pack_start(self.action_label)
 
     def report_path(self, command: str) -> Path:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -197,6 +202,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             lambda: self.run_command("inputs", ["--yes"]),
         )
 
+    def on_modes(self, _button) -> None:
+        self.confirm(
+            "Test the keyboard and pen mode cycle?",
+            "Start in Halo keyboard mode. After continuing, follow the live instruction in the window: switch to drawing/pen mode, then switch back only when asked. The validator observes device metadata but never reads keys, touches, or pen strokes. Administrator authorization is required.",
+            lambda: self.run_command("modes", ["--yes"]),
+        )
+
     def on_lights(self, _button) -> None:
         self.confirm(
             "Test panel and platform lights?",
@@ -231,6 +243,10 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.spinner.start()
         self.set_sensitive(False)
 
+        if command == "modes":
+            self.run_interactive_command(argv, output)
+            return
+
         def worker() -> None:
             try:
                 command_timeout = 600 if command == "automated" else 300
@@ -242,10 +258,43 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def run_interactive_command(self, argv: list[str], output: Path) -> None:
+        def worker() -> None:
+            error = ""
+            lines: list[str] = []
+            try:
+                process = subprocess.Popen(
+                    argv,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+                assert process.stdout is not None
+                for line in process.stdout:
+                    clean = line.strip()
+                    lines.append(clean)
+                    if clean.startswith("ACTION_REQUIRED:"):
+                        GLib.idle_add(self.show_action, clean.removeprefix("ACTION_REQUIRED:").strip())
+                returncode = process.wait()
+                if returncode not in (0, 1):
+                    error = "\n".join(lines[-12:])
+            except OSError as exc:
+                error = str(exc)
+            GLib.idle_add(self.command_finished, output, error)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def show_action(self, message: str) -> bool:
+        self.action_label.set_text(message)
+        self.action_label.set_tooltip_text(message)
+        self.action_label.set_visible(True)
+        return GLib.SOURCE_REMOVE
+
     def command_finished(self, output: Path, error: str) -> bool:
         self.set_sensitive(True)
         self.spinner.stop()
         self.spinner.set_visible(False)
+        self.action_label.set_visible(False)
         report = output / "results.tsv"
         if report.exists():
             self.last_report = output

@@ -1,3 +1,11 @@
+yogabook-validator (0.11.0) unstable; urgency=medium
+
+  * Observe physical Halo keyboard to Wacom pen mode transitions.
+  * Validate pen capabilities, calibration and restored desktop input state.
+  * Show live mode-switch instructions in the graphical validator.
+
+ -- Yoga Book Project <noreply@yogabook.local>  Sat, 22 Aug 2026 03:58:00 +0200
+
 yogabook-validator (0.10.0) unstable; urgency=medium
 
   * Validate Cherry Trail platform-driver and CPU power-state coverage.

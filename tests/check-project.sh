@@ -15,6 +15,7 @@ required=(
 	libexec/yogabook-validator-camera.sh
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
+	libexec/yogabook-validator-modes.sh
 	libexec/yogabook-validator-platform.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
 	libexec/yogabook-validator-storage.sh
@@ -34,7 +35,7 @@ done < <(
 	printf '%s\n' "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 )
 test -x "$root/ui/yogabook_validator_ui.py"
-for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
 	set +e
 	"$root/libexec/$private_helper" >/dev/null 2>&1
 	helper_rc=$?
@@ -105,13 +106,27 @@ if grep -RqF 'chown -R -- "$real_user:' "$root/libexec"; then
 	echo 'report ownership must use the explicit primary group helper' >&2
 	exit 1
 fi
-for report_writer in yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+for report_writer in yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
 	# shellcheck disable=SC2016
 	grep -Fq 'ybv_finish_report_for_user "$real_user"' "$root/libexec/$report_writer"
 done
 grep -Fq 'command_timeout = 600 if command == "automated" else 300' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'does not grab devices' "$root/README.md"
 grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-inputs.sh"
+grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'LIBINPUT_CALIBRATION_MATRIX' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'Wacom HID 169 Pen' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'ACTION_REQUIRED:' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'GetCurrentState' "$root/libexec/yogabook-validator-modes.sh"
+grep -Fq 'screen-keyboard-enabled' "$root/libexec/yogabook-validator-modes.sh"
+if grep -Eq '(^|[^[:alpha:]])(read|read_loop|grab)\(' "$root/libexec/yogabook-validator-modes.sh"; then
+	echo 'mode-cycle validation must not read or grab input events' >&2
+	exit 1
+fi
+if grep -Fq 'run_subtest modes' "$root/libexec/yogabook-validator-automated.sh"; then
+	echo 'physical mode-cycle validation must not be part of automated' >&2
+	exit 1
+fi
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'cht_wcove_pwrsrc' "$root/libexec/yogabook-validator-power.sh"

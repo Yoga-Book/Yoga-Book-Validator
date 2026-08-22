@@ -15,6 +15,7 @@ output_dir=
 assume_yes=false
 include_suspend=false
 suspend_seconds=8
+mode_timeout=90
 while (($#)); do
 	case $1 in
 	--output)
@@ -27,6 +28,10 @@ while (($#)); do
 	--seconds)
 		[[ $# -ge 2 ]] || { echo 'ERROR: --seconds requires a value' >&2; exit 2; }
 		suspend_seconds=$2; shift 2 ;;
+	--timeout)
+		[[ $action == modes ]] || { echo 'ERROR: --timeout is valid only for modes' >&2; exit 2; }
+		[[ $# -ge 2 ]] || { echo 'ERROR: --timeout requires a value' >&2; exit 2; }
+		mode_timeout=$2; shift 2 ;;
 	*)
 		if [[ $action == suspend && $1 =~ ^[1-9][0-9]*$ ]]; then suspend_seconds=$1; shift
 		else echo "ERROR: unknown option: $1" >&2; exit 2
@@ -34,6 +39,7 @@ while (($#)); do
 	esac
 done
 [[ $suspend_seconds =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: suspend duration must be a positive integer' >&2; exit 2; }
+[[ $mode_timeout =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: mode transition timeout must be a positive integer' >&2; exit 2; }
 
 case $action in
 audio)
@@ -50,6 +56,8 @@ inputs)
 	prompt='This test reads kernel input capability maps without grabbing devices, monitoring events, or injecting input.' ;;
 lights)
 	prompt='This test makes one-step changes to panel and platform light brightness, then restores every brightness and trigger value.' ;;
+modes)
+	prompt='This test observes one physical Halo keyboard to Wacom pen to Halo keyboard mode cycle. It does not read or record input events.' ;;
 storage)
 	prompt='This test reads the inserted SD card and mounts its filesystems read-only, then restores their original mount state.' ;;
 suspend)
@@ -67,7 +75,7 @@ if [[ $assume_yes != true ]]; then
 fi
 
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
-if [[ $action == haptics || $action == inputs ]]; then
+if [[ $action == haptics || $action == inputs || $action == modes ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
 elif [[ $action == automated || $action == lights || $action == storage || $action == wireless ]]; then
 	:
@@ -106,8 +114,10 @@ if [[ $action == automated ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-automated.sh" "${automated_args[@]}"
 fi
 
-if [[ $action == inputs || $action == lights || $action == storage || $action == wireless ]]; then
-	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-$action.sh" --output "$output_dir"
+if [[ $action == inputs || $action == lights || $action == modes || $action == storage || $action == wireless ]]; then
+	active_args=(--output "$output_dir")
+	[[ $action == modes ]] && active_args+=(--timeout "$mode_timeout")
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-$action.sh" "${active_args[@]}"
 fi
 
 ybv_begin_report "$action" "$output_dir"

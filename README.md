@@ -43,7 +43,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.10.0_all.deb
+sudo apt install ../yogabook-validator_0.11.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -56,6 +56,7 @@ yogabook-validator camera
 yogabook-validator haptics
 yogabook-validator inputs
 yogabook-validator lights
+yogabook-validator modes
 yogabook-validator platform
 yogabook-validator power
 yogabook-validator sensors
@@ -101,6 +102,14 @@ The input-capability test opens event nodes read-only and validates the key,
 switch, absolute-axis and force-feedback features exposed by the kernel. It
 does not grab devices, monitor events, record user input or inject events.
 
+The mode-cycle test starts in Halo keyboard mode and waits for the user to
+switch physically to drawing/pen mode and back. It verifies Wacom position,
+pressure, tool and touch capabilities, the libinput calibration matrix, Halo
+service recovery, display touchscreen presence, Mutter logical display state,
+GNOME orientation-lock and onscreen-keyboard settings, and transition-time
+kernel errors. It never reads keys, touches or pen strokes. Because this test
+requires physical action, it is intentionally excluded from `automated`.
+
 The power test reads the battery fuel gauge and charger without changing any
 charging policy. It validates health, electrical and charge-counter ranges,
 cross-checks both charger interfaces, and confirms that UPower exposes the
@@ -137,8 +146,10 @@ playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, captures three frames from each sensor to `/dev/null`, and
 restores the original route. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
-reading events. `storage` validates an inserted SD card without
-writing. `platform` validates the SoC driver set, CPU power management,
+reading events. `modes` observes one physical Halo keyboard to Wacom pen to
+Halo keyboard cycle and accepts `--timeout SECONDS`. `storage` validates an
+inserted SD card without writing. `platform` validates the SoC driver set, CPU
+power management,
 thermal stack, eMMC health, root filesystem and RTC wake capability. `power`
 validates battery, charger and UPower telemetry. `sensors`
 samples the complete IIO layout and SensorProxy. `lights`
