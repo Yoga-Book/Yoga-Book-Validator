@@ -19,6 +19,7 @@ Commands:
   audio                  Run state-safe audio transport and signal tests
   camera                 Stream three frames from both cameras and restore route
   haptics                Pulse both Halo haptic actuators for 150 ms
+  inputs                 Inspect kernel capabilities without reading events
   lights                 Exercise and restore panel and platform lights
   sensors                Sample every Yoga Book IIO sensor channel
   storage                Read the inserted SD card without writing to it
@@ -43,7 +44,7 @@ case $command_name in
 check | camera | gnss | physical | full | bundle | sensors)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
-audio | haptics | lights | storage | suspend | wireless)
+audio | haptics | inputs | lights | storage | suspend | wireless)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then

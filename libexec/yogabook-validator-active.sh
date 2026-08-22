@@ -36,6 +36,8 @@ audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
+inputs)
+	prompt='This test reads kernel input capability maps without grabbing devices, monitoring events, or injecting input.' ;;
 lights)
 	prompt='This test makes one-step changes to panel and platform light brightness, then restores every brightness and trigger value.' ;;
 storage)
@@ -55,7 +57,7 @@ if [[ $assume_yes != true ]]; then
 fi
 
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
-if [[ $action == haptics ]]; then
+if [[ $action == haptics || $action == inputs ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
 elif [[ $action == lights || $action == storage || $action == wireless ]]; then
 	:
@@ -88,7 +90,7 @@ if [[ -n $real_user ]]; then
 	fi
 fi
 
-if [[ $action == lights || $action == storage || $action == wireless ]]; then
+if [[ $action == inputs || $action == lights || $action == storage || $action == wireless ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-$action.sh" --output "$output_dir"
 fi
 

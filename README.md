@@ -15,7 +15,8 @@ remain in their own packages.
   fatal journal signatures;
 - SOF firmware/topology, the `yogabook` ALSA card, UCM devices, PipeWire and
   raw speaker state;
-- Halo keyboard/touchpad/haptics, Wacom pen and display touchscreen presence;
+- Halo keyboard/touchpad/haptics, Wacom pen and display touchscreen presence
+  and kernel capability maps;
 - the exact Halo keyboard, touchpad, dual-haptic and IIO sensor layout;
 - Wi-Fi, Bluetooth, eMMC, SD slot/card, USB, DSI display and platform LEDs;
 - XMM7260/ModemManager, adapting expectations when no SIM is installed;
@@ -38,7 +39,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.5.0_all.deb
+sudo apt install ../yogabook-validator_0.6.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -48,6 +49,7 @@ yogabook-validator check
 yogabook-validator audio
 yogabook-validator camera
 yogabook-validator haptics
+yogabook-validator inputs
 yogabook-validator lights
 yogabook-validator sensors
 yogabook-validator storage
@@ -84,6 +86,10 @@ channel and confirms that SensorProxy returns live desktop values. The lights
 test changes each brightness by only one step, then restores the panel and all
 LED brightness and trigger values even if the test is interrupted.
 
+The input-capability test opens event nodes read-only and validates the key,
+switch, absolute-axis and force-feedback features exposed by the kernel. It
+does not grab devices, monitor events, record user input or inject events.
+
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
 the original Bluetooth power and rfkill state. Nearby device identities are
@@ -99,7 +105,8 @@ capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
 playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
 AtomISP media route, captures three frames from each sensor to `/dev/null`, and
 restores the original route. `haptics` plays one bounded 150 ms pulse on each
-actuator at moderate strength. `storage` validates an inserted SD card without
+actuator at moderate strength. `inputs` audits kernel capability maps without
+reading events. `storage` validates an inserted SD card without
 writing. `sensors` samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control
 paths. `wireless` checks the current Wi-Fi gateway and bounded Bluetooth

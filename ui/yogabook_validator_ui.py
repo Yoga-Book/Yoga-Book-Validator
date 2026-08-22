@@ -85,6 +85,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
             ("Test cameras", "Stream three frames from both sensors and restore the original route", self.on_camera, False),
             ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
+            ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
             ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
             ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
@@ -176,6 +177,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Test inserted SD card?",
             "The validator reads the first 4 MiB and mounts recognized filesystems read-only. It does not write to the card and removes every temporary mount.",
             lambda: self.run_command("storage", ["--yes"]),
+        )
+
+    def on_inputs(self, _button) -> None:
+        self.confirm(
+            "Inspect input capabilities?",
+            "The validator opens each kernel input node read-only to inspect its capability map. It does not grab devices, monitor events, record keys or touches, or inject input. Administrator authorization is required.",
+            lambda: self.run_command("inputs", ["--yes"]),
         )
 
     def on_lights(self, _button) -> None:
