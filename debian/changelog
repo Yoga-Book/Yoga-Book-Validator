@@ -1,3 +1,10 @@
+yogabook-validator (0.21.3) unstable; urgency=medium
+
+  * Reapply the saved UCM profile after restoring ALSA mixer state.
+  * Verify the restored desktop microphone route before reporting success.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 23 Aug 2026 16:05:00 +0200
+
 yogabook-validator (0.21.2) unstable; urgency=medium
 
   * Verify GNSS, desktop audio and critical services after all active tests.

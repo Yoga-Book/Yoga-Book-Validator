@@ -222,6 +222,7 @@ playback_pid=
 capture_pid=
 desktop_ready_seconds=
 desktop_recovery_used=false
+desktop_profile=
 playback_log="$YBV_REPORT_DIR/suspend-playback.log"
 capture_log="$YBV_REPORT_DIR/suspend-capture.log"
 
@@ -263,6 +264,18 @@ desktop_audio_probe() {
 	[[ $monitor_rc -eq 0 || $monitor_rc -eq 124 ]] || return 1
 	[[ $playback_rc -eq 0 && $sink_running == true && $pcm_running == true ]] || return 1
 	amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+	case $desktop_profile in
+	*Mic1*)
+		amixer -c yogabook cget name='Int Mic Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		amixer -c yogabook cget name='Sto1 ADC MIXL ADC2 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		amixer -c yogabook cget name='Sto1 ADC MIXR ADC2 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		;;
+	*Headset*)
+		amixer -c yogabook cget name='Headset Mic Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		amixer -c yogabook cget name='Sto1 ADC MIXL ADC1 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		amixer -c yogabook cget name='Sto1 ADC MIXR ADC1 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		;;
+	esac
 	signal=$(python3 - "$desktop_probe_file" <<'PY'
 import math, struct, sys
 raw = open(sys.argv[1], "rb").read()
@@ -298,6 +311,27 @@ restore_state() {
 			# retaining stale nodes from the period without a session manager.
 			ybv_run_as_user "$real_user" systemctl --user restart \
 				pipewire.service pipewire-pulse.service wireplumber.service >/dev/null 2>&1 || desktop_rc=1
+			if [[ -n $desktop_profile && $desktop_profile != off ]]; then
+				profile_ready=false
+				for _ in {1..30}; do
+					if ybv_run_as_user "$real_user" timeout 2 pactl list cards short 2>/dev/null |
+						awk '$2 == "alsa_card.platform-cht-yogabook" { found=1 } END { exit !found }'; then
+						profile_ready=true
+						break
+					fi
+					sleep 0.2
+				done
+				if [[ $profile_ready == true ]]; then
+					# Replay the UCM device enable sequences after restoring the raw
+					# mixer snapshot, even when WirePlumber retained the same profile.
+					ybv_run_as_user "$real_user" pactl set-card-profile \
+						alsa_card.platform-cht-yogabook off >/dev/null 2>&1 || desktop_rc=1
+					ybv_run_as_user "$real_user" pactl set-card-profile \
+						alsa_card.platform-cht-yogabook "$desktop_profile" >/dev/null 2>&1 || desktop_rc=1
+				else
+					desktop_rc=1
+				fi
+			fi
 			desktop_ready_seconds=
 			consecutive_ready=0
 			desktop_wait_started=$SECONDS
@@ -336,6 +370,25 @@ else
 	ybv_emit audio state-snapshot FAIL 'Could not save live ALSA state'
 	ybv_finish_report
 	exit 1
+fi
+
+if [[ -n $real_user ]]; then
+	desktop_profile=$(ybv_run_as_user "$real_user" timeout 3 pactl list cards 2>/dev/null |
+		awk '
+			/^[[:space:]]*Name: alsa_card\.platform-cht-yogabook$/ { in_card=1; next }
+			/^[[:space:]]*Name:/ { in_card=0 }
+			in_card && /^[[:space:]]*Active Profile:/ {
+				sub(/^[[:space:]]*Active Profile:[[:space:]]*/, "")
+				print
+				exit
+			}
+		' || true)
+	if [[ -z $desktop_profile ]]; then
+		ybv_emit audio desktop-profile FAIL 'Could not save the active Yoga Book desktop audio profile'
+		ybv_finish_report
+		exit 1
+	fi
+	ybv_emit audio desktop-profile PASS 'Saved the active Yoga Book desktop audio profile' "$desktop_profile"
 fi
 
 if [[ -n $real_user ]]; then
