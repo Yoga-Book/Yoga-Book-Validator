@@ -48,7 +48,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.22.0_all.deb
+sudo apt install ../yogabook-validator_0.23.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -69,6 +69,9 @@ yogabook-validator platform
 yogabook-validator power
 yogabook-validator resources
 yogabook-validator sensors
+yogabook-validator stability start 3
+yogabook-validator stability check
+yogabook-validator stability status
 yogabook-validator storage
 yogabook-validator storage-write
 yogabook-validator suspend 8
@@ -84,6 +87,14 @@ suspend/resume cycle is appropriate.
 The UI and CLI save `results.tsv` and `validator.log` under the user's results
 directory. The active audio and suspend tests ask for confirmation and Polkit
 authorization. The quick passive audit and full passive suite need neither.
+
+Cold-boot stability tracking is read-only and never reboots or changes GRUB.
+`stability start 3` validates and records the current kernel, boot ID, SOF
+firmware and topology as the baseline. After each physical power-off/power-on,
+run `stability check`; it accepts a new boot ID only once and revalidates the
+kernel and audio integration before advancing the counter. A boot-ID change
+cannot distinguish a cold boot from an ordinary reboot, so the operator must
+perform the physical power cycle. `stability status` never changes progress.
 
 ## Safety model
 

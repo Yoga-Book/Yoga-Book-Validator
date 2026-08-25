@@ -22,6 +22,7 @@ required=(
 	libexec/yogabook-validator-passive.sh
 	libexec/yogabook-validator-platform.sh
 	libexec/yogabook-validator-resources.sh
+	libexec/yogabook-validator-stability.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
 	libexec/yogabook-validator-storage.sh
 	libexec/yogabook-validator-usb.sh libexec/yogabook-validator-wireless.sh
@@ -40,7 +41,7 @@ done < <(
 	printf '%s\n' "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 )
 test -x "$root/ui/yogabook_validator_ui.py"
-for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-stability.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
 	set +e
 	"$root/libexec/$private_helper" >/dev/null 2>&1
 	helper_rc=$?
@@ -160,8 +161,11 @@ if grep -Eq 'camera|audio|haptics|lights|storage|wireless|suspend|pkexec|sudo' "
 fi
 grep -Fq 'passive                Run every read-only validation as one merged suite' "$root/src/yogabook-validator.sh"
 grep -Fq 'resources              Profile Yoga Book services and thermal safeguards' "$root/src/yogabook-validator.sh"
+grep -Fq 'stability ACTION       Track operator-confirmed cold-boot validation' "$root/src/yogabook-validator.sh"
 grep -Fq 'self.run_command("passive", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("resources", [])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
 grep -Fq 'check_package yogabook-validator platform "$YBV_VERSION"' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq "check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook2'" "$root/libexec/yogabook-validator-check.sh"
@@ -246,6 +250,8 @@ grep -Fq 'CPUQuota=100%' "$root/libexec/yogabook-validator-resources.sh"
 grep -Fq 'CPUQuota=50%' "$root/libexec/yogabook-validator-resources.sh"
 grep -Fq '<SensorType>$invalid_sensor</SensorType>' "$root/libexec/yogabook-validator-resources.sh"
 grep -Fq 'journalctl -b -k --no-pager' "$root/libexec/yogabook-validator-resources.sh"
+grep -Fq 'COLD_BOOT_STABILITY: PASS' "$root/libexec/yogabook-validator-stability.sh"
+grep -Fq 'This boot was already used as the baseline or counted once' "$root/libexec/yogabook-validator-stability.sh"
 grep -Fq 'emmc_candidates=()' "$root/libexec/yogabook-validator-platform.sh"
 grep -Fq '== MMC' "$root/libexec/yogabook-validator-platform.sh"
 if grep -Fq 'emmc=/sys/class/block/mmcblk0' "$root/libexec/yogabook-validator-platform.sh"; then
@@ -345,9 +351,14 @@ mkdir -p "$fake/sys/class/dmi/id" "$fake/proc/asound/card7" "$fake/proc/bus/inpu
 	"$fake/sys/bus/pci/devices/0000:00:14.0" "$fake/sys/bus/pci/drivers/brcmfmac" \
 	"$fake/sys/bus/pci/drivers/xhci_hcd" "$fake/dev" "$fake/run/thermald" \
 	"$fake/sys/class/hwmon/hwmon0" "$fake/sys/class/hwmon/hwmon1" \
-	"$fake/sys/class/hwmon/hwmon2" "$fake/sys/class/thermal/thermal_zone0"
+	"$fake/sys/class/hwmon/hwmon2" "$fake/sys/class/thermal/thermal_zone0" \
+	"$fake/proc/sys/kernel/random" \
+	"$fake/sys/module/snd_intel_dspcfg/parameters"
 printf 'LenovoYB1-X91L\n' >"$fake/sys/class/dmi/id/product_name"
 printf 'LENOVO\n' >"$fake/sys/class/dmi/id/sys_vendor"
+printf 'boot-one\n' >"$fake/proc/sys/kernel/random/boot_id"
+printf 'snd_sof 0 0 - Live 0x0\n' >"$fake/proc/modules"
+printf '0\n' >"$fake/sys/module/snd_intel_dspcfg/parameters/dsp_driver"
 printf 'coretemp\n' >"$fake/sys/class/hwmon/hwmon0/name"
 for core in 0 1 2 3; do
 	channel=$((core + 2))
@@ -451,6 +462,45 @@ grep -Fq $'thermal\tthermald-policy\tPASS' "$temporary/resources/results.tsv"
 grep -Fq $'thermal\tcoretemp-critical\tPASS' "$temporary/resources/results.tsv"
 grep -Fq $'thermal\tcooling-capacity\tPASS' "$temporary/resources/results.tsv"
 grep -Fq $'thermal\tlive-temperatures\tPASS' "$temporary/resources/results.tsv"
+stability_env=(
+	YBV_SYSROOT="$fake"
+	YBV_LIBEXEC_DIR="$root/libexec"
+	YBV_STABILITY_STATE_DIR="$temporary/stability-state"
+	YBV_STABILITY_KERNEL_RELEASE=7.2.0-yogabook-test
+)
+env "${stability_env[@]}" "$root/src/yogabook-validator.sh" \
+	stability start 2 --output "$temporary/stability-start"
+grep -Fq $'stability\tboot-id\tPASS' "$temporary/stability-start/results.tsv"
+grep -Fxq '0' "$temporary/stability-state/passed"
+set +e
+env "${stability_env[@]}" "$root/src/yogabook-validator.sh" \
+	stability check --output "$temporary/stability-same-boot"
+stability_rc=$?
+set -e
+[[ $stability_rc -eq 1 ]]
+grep -Fq $'stability\tboot-id\tFAIL' "$temporary/stability-same-boot/results.tsv"
+printf 'boot-two\n' >"$fake/proc/sys/kernel/random/boot_id"
+printf 'changed topology\n' >"$fake/lib/firmware/intel/sof-tplg/sof-cht-rt5677.tplg"
+set +e
+env "${stability_env[@]}" "$root/src/yogabook-validator.sh" \
+	stability check --output "$temporary/stability-changed-topology"
+stability_rc=$?
+set -e
+[[ $stability_rc -eq 1 ]]
+grep -Fq $'stability\ttopology\tFAIL' "$temporary/stability-changed-topology/results.tsv"
+printf 'topology\n' >"$fake/lib/firmware/intel/sof-tplg/sof-cht-rt5677.tplg"
+env "${stability_env[@]}" "$root/src/yogabook-validator.sh" \
+	stability check --output "$temporary/stability-boot-two"
+grep -Fxq '1' "$temporary/stability-state/passed"
+env "${stability_env[@]}" "$root/src/yogabook-validator.sh" stability status \
+	>"$temporary/stability-status.out"
+grep -Fq 'COLD_BOOT_STABILITY: 1/2' "$temporary/stability-status.out"
+printf 'boot-three\n' >"$fake/proc/sys/kernel/random/boot_id"
+env "${stability_env[@]}" "$root/src/yogabook-validator.sh" \
+	stability check --output "$temporary/stability-boot-three" \
+	>"$temporary/stability-boot-three.out"
+grep -Fq 'COLD_BOOT_STABILITY: PASS 2/2' "$temporary/stability-boot-three.out"
+grep -Fxq '2' "$temporary/stability-state/passed"
 printf '%s\n' \
 	'<ThermalConfiguration><Platform><ThermalZones><ThermalZone><TripPoints><TripPoint>' \
 	'<SensorType>STR0</SensorType>' \

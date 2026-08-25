@@ -95,6 +95,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
             ("Inspect platform", "Validate SoC drivers, CPU power, thermals, eMMC health, and RTC wake", self.on_platform, False),
             ("Inspect resources", "Profile Yoga Book services and verify thermal safeguards", self.on_resources, False),
+            ("Start cold-boot tracking", "Validate a baseline and track three physical cold boots", self.on_stability_start, False),
+            ("Check current cold boot", "Validate and count this boot after a physical power cycle", self.on_stability_check, False),
             ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
             ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
@@ -253,6 +255,16 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
     def on_resources(self, _button) -> None:
         self.run_command("resources", [])
+
+    def on_stability_start(self, _button) -> None:
+        self.confirm(
+            "Start cold-boot stability tracking?",
+            "The validator checks the current baseline and replaces any previous cold-boot counter. It does not reboot or change GRUB. After it succeeds, fully power off and start the tablet before each check.",
+            lambda: self.run_command("stability", ["start", "3"]),
+        )
+
+    def on_stability_check(self, _button) -> None:
+        self.run_command("stability", ["check"])
 
     def on_wireless(self, _button) -> None:
         self.confirm(

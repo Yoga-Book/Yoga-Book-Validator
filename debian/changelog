@@ -1,3 +1,12 @@
+yogabook-validator (0.23.0) unstable; urgency=medium
+
+  * Add persistent operator-confirmed cold-boot stability tracking.
+  * Pin the kernel, SOF firmware and topology across each counted boot.
+  * Revalidate the ALSA card, UCM, PipeWire and fatal kernel signatures.
+  * Expose baseline and per-boot checks through both the CLI and UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Tue, 25 Aug 2026 10:30:00 +0200
+
 yogabook-validator (0.22.0) unstable; urgency=medium
 
   * Profile sustained CPU, memory, task and restart use for Yoga Book services.
