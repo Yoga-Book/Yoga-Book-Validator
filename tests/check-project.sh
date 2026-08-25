@@ -21,6 +21,7 @@ required=(
 	libexec/yogabook-validator-modes.sh
 	libexec/yogabook-validator-passive.sh
 	libexec/yogabook-validator-platform.sh
+	libexec/yogabook-validator-resources.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
 	libexec/yogabook-validator-storage.sh
 	libexec/yogabook-validator-usb.sh libexec/yogabook-validator-wireless.sh
@@ -150,7 +151,7 @@ grep -Fq 'services-final-state PASS' "$root/libexec/yogabook-validator-automated
 gnss_final_line=$(grep -nF 'gnss-final-state PASS' "$root/libexec/yogabook-validator-automated.sh" | cut -d: -f1)
 audio_run_line=$(grep -nF 'run_subtest audio' "$root/libexec/yogabook-validator-automated.sh" | tail -n 1 | cut -d: -f1)
 ((gnss_final_line > audio_run_line))
-for passive_check in check platform display sensors power usb gnss; do
+for passive_check in check platform resources display sensors power usb gnss; do
 	grep -Fq "run_subtest $passive_check" "$root/libexec/yogabook-validator-passive.sh"
 done
 if grep -Eq 'camera|audio|haptics|lights|storage|wireless|suspend|pkexec|sudo' "$root/libexec/yogabook-validator-passive.sh"; then
@@ -158,7 +159,9 @@ if grep -Eq 'camera|audio|haptics|lights|storage|wireless|suspend|pkexec|sudo' "
 	exit 1
 fi
 grep -Fq 'passive                Run every read-only validation as one merged suite' "$root/src/yogabook-validator.sh"
+grep -Fq 'resources              Profile Yoga Book services and thermal safeguards' "$root/src/yogabook-validator.sh"
 grep -Fq 'self.run_command("passive", [])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.run_command("resources", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
 grep -Fq 'check_package yogabook-validator platform "$YBV_VERSION"' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq "check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook2'" "$root/libexec/yogabook-validator-check.sh"
@@ -237,6 +240,12 @@ grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.s
 grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'cht_wcove_pwrsrc' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'expected_pci_drivers' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'YBV_RESOURCE_SAMPLE_SECONDS' "$root/libexec/yogabook-validator-resources.sh"
+grep -Fq 'CPUQuota=175%' "$root/libexec/yogabook-validator-resources.sh"
+grep -Fq 'CPUQuota=100%' "$root/libexec/yogabook-validator-resources.sh"
+grep -Fq 'CPUQuota=50%' "$root/libexec/yogabook-validator-resources.sh"
+grep -Fq '<SensorType>$invalid_sensor</SensorType>' "$root/libexec/yogabook-validator-resources.sh"
+grep -Fq 'journalctl -b -k --no-pager' "$root/libexec/yogabook-validator-resources.sh"
 grep -Fq 'emmc_candidates=()' "$root/libexec/yogabook-validator-platform.sh"
 grep -Fq '== MMC' "$root/libexec/yogabook-validator-platform.sh"
 if grep -Fq 'emmc=/sys/class/block/mmcblk0' "$root/libexec/yogabook-validator-platform.sh"; then
@@ -334,9 +343,49 @@ mkdir -p "$fake/sys/class/dmi/id" "$fake/proc/asound/card7" "$fake/proc/bus/inpu
 	"$fake/sys/class/leds/ybwmi::kbd_backlight" "$fake/sys/block/mmcblk0/device" \
 	"$fake/sys/block/mmcblk1/device" "$fake/sys/bus/pci/devices/0000:01:00.0" \
 	"$fake/sys/bus/pci/devices/0000:00:14.0" "$fake/sys/bus/pci/drivers/brcmfmac" \
-	"$fake/sys/bus/pci/drivers/xhci_hcd" "$fake/dev"
+	"$fake/sys/bus/pci/drivers/xhci_hcd" "$fake/dev" "$fake/run/thermald" \
+	"$fake/sys/class/hwmon/hwmon0" "$fake/sys/class/hwmon/hwmon1" \
+	"$fake/sys/class/hwmon/hwmon2" "$fake/sys/class/thermal/thermal_zone0"
 printf 'LenovoYB1-X91L\n' >"$fake/sys/class/dmi/id/product_name"
 printf 'LENOVO\n' >"$fake/sys/class/dmi/id/sys_vendor"
+printf 'coretemp\n' >"$fake/sys/class/hwmon/hwmon0/name"
+for core in 0 1 2 3; do
+	channel=$((core + 2))
+	printf 'Core %d\n' "$core" >"$fake/sys/class/hwmon/hwmon0/temp${channel}_label"
+	printf '42000\n' >"$fake/sys/class/hwmon/hwmon0/temp${channel}_input"
+	printf '90000\n' >"$fake/sys/class/hwmon/hwmon0/temp${channel}_crit"
+done
+printf 'bq27542_0\n' >"$fake/sys/class/hwmon/hwmon1/name"
+printf '33000\n' >"$fake/sys/class/hwmon/hwmon1/temp1_input"
+printf 'bq25890_charger_0\n' >"$fake/sys/class/hwmon/hwmon2/name"
+printf '32000\n' >"$fake/sys/class/hwmon/hwmon2/temp1_input"
+printf 'PNIT\n' >"$fake/sys/class/thermal/thermal_zone0/type"
+printf '49000\n' >"$fake/sys/class/thermal/thermal_zone0/temp"
+for index in 0 1 2 3 4 5; do
+	mkdir -p "$fake/sys/class/thermal/cooling_device$index"
+	if ((index < 4)); then
+		cooling_type=Processor
+		maximum=10
+	elif ((index == 4)); then
+		cooling_type=intel_powerclamp
+		maximum=100
+	else
+		cooling_type=TCHG
+		maximum=5
+	fi
+	printf '%s\n' "$cooling_type" >"$fake/sys/class/thermal/cooling_device$index/type"
+	printf '0\n' >"$fake/sys/class/thermal/cooling_device$index/cur_state"
+	printf '%s\n' "$maximum" >"$fake/sys/class/thermal/cooling_device$index/max_state"
+done
+printf '%s\n' \
+	'<?xml version="1.0"?>' \
+	'<ThermalConfiguration><Platform><ThermalSensors>' \
+	'<ThermalSensor><Type>yb_core0</Type><Path>/sys/class/hwmon/hwmon0/temp2_input</Path></ThermalSensor>' \
+	'<ThermalSensor><Type>yb_pnit</Type><Path>/sys/class/thermal/thermal_zone0/temp</Path></ThermalSensor>' \
+	'<ThermalSensor><Type>yb_battery</Type><Path>/sys/class/hwmon/hwmon1/temp1_input</Path></ThermalSensor>' \
+	'<ThermalSensor><Type>yb_charger</Type><Path>/sys/class/hwmon/hwmon2/temp1_input</Path></ThermalSensor>' \
+	'</ThermalSensors></Platform></ThermalConfiguration>' \
+	>"$fake/run/thermald/thermal-conf.xml.auto"
 printf ' 7 [yogabook      ]: sof-cht - sof-cht yogabook\n' >"$fake/proc/asound/cards"
 printf 'yogabook\n' >"$fake/proc/asound/card7/id"
 printf '%s\n' \
@@ -396,5 +445,22 @@ grep -Fq $'storage\tsd-card\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'display\tpanel\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'platform\tleds\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'power\tbattery\tPASS' "$temporary/check/results.tsv"
+YBV_SYSROOT="$fake" YBV_LIBEXEC_DIR="$root/libexec" \
+	"$root/src/yogabook-validator.sh" resources --output "$temporary/resources"
+grep -Fq $'thermal\tthermald-policy\tPASS' "$temporary/resources/results.tsv"
+grep -Fq $'thermal\tcoretemp-critical\tPASS' "$temporary/resources/results.tsv"
+grep -Fq $'thermal\tcooling-capacity\tPASS' "$temporary/resources/results.tsv"
+grep -Fq $'thermal\tlive-temperatures\tPASS' "$temporary/resources/results.tsv"
+printf '%s\n' \
+	'<ThermalConfiguration><Platform><ThermalZones><ThermalZone><TripPoints><TripPoint>' \
+	'<SensorType>STR0</SensorType>' \
+	'</TripPoint></TripPoints></ThermalZone></ThermalZones></Platform></ThermalConfiguration>' \
+	>"$fake/invalid-thermal.xml"
+mkdir -p "$fake/sys/class/thermal/thermal_zone1"
+printf 'STR0\n' >"$fake/sys/class/thermal/thermal_zone1/type"
+printf '%s\n' '-273150' >"$fake/sys/class/thermal/thermal_zone1/temp"
+YBV_SYSROOT="$fake" YBV_THERMAL_CONFIG=/invalid-thermal.xml YBV_LIBEXEC_DIR="$root/libexec" \
+	"$root/src/yogabook-validator.sh" resources --output "$temporary/resources-invalid" || true
+grep -Fq $'thermal\tthermald-policy\tFAIL' "$temporary/resources-invalid/results.tsv"
 
 echo 'Yoga Book Validator project checks: PASS'

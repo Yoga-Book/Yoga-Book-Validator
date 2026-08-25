@@ -94,6 +94,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ("Test automatic rotation", "Verify all four sensor orientations and return upright", self.on_rotation, False),
             ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
             ("Inspect platform", "Validate SoC drivers, CPU power, thermals, eMMC health, and RTC wake", self.on_platform, False),
+            ("Inspect resources", "Profile Yoga Book services and verify thermal safeguards", self.on_resources, False),
             ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
             ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
             ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
@@ -249,6 +250,9 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
     def on_platform(self, _button) -> None:
         self.run_command("platform", [])
+
+    def on_resources(self, _button) -> None:
+        self.run_command("resources", [])
 
     def on_wireless(self, _button) -> None:
         self.confirm(

@@ -1,3 +1,12 @@
+yogabook-validator (0.22.0) unstable; urgency=medium
+
+  * Profile sustained CPU, memory, task and restart use for Yoga Book services.
+  * Verify the packaged Camera, Halo and GNSS systemd resource limits.
+  * Detect ineffective thermald sensor bindings and unsafe thermal telemetry.
+  * Include the unprivileged resource audit in the full passive suite and UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 24 Aug 2026 23:45:00 +0200
+
 yogabook-validator (0.21.3) unstable; urgency=medium
 
   * Reapply the saved UCM profile after restoring ALSA mixer state.

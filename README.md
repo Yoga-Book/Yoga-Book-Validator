@@ -15,6 +15,8 @@ remain in their own packages.
   fatal journal signatures, plus installed integration-package integrity;
 - Cherry Trail SoC drivers, CPU frequency/idle states, thermal sensors and
   cooling devices, eMMC health, root filesystem, periodic discard and RTC wake;
+- effective thermald sensor bindings, four-core critical limits, live thermal
+  margins and bounded CPU, memory, task and restart use for Yoga Book services;
 - SOF firmware/topology, the `yogabook` ALSA card, UCM devices, PipeWire and
   raw speaker state;
 - Halo keyboard/touchpad/haptics, Wacom pen and display touchscreen presence
@@ -46,7 +48,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.21.3_all.deb
+sudo apt install ../yogabook-validator_0.22.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -65,6 +67,7 @@ yogabook-validator modes
 yogabook-validator rotation
 yogabook-validator platform
 yogabook-validator power
+yogabook-validator resources
 yogabook-validator sensors
 yogabook-validator storage
 yogabook-validator storage-write
@@ -148,6 +151,14 @@ changing policy or power state. It reports only eMMC wear indicators and block
 properties; card identifiers, serial numbers, CID and manufacturer fields are
 never collected.
 
+The resource test is also read-only and unprivileged. It samples cumulative
+systemd CPU accounting for three seconds, checks memory and task headroom, and
+verifies the packaged cgroup limits for the Halo keyboard, camera processor and
+GNSS transport. It checks thermald's effective sensor bindings, hardware CPU
+critical limits, available cooling devices and current platform, battery and
+charger temperatures. It reports unsafe or implausible state but never changes
+CPU, charging, cooling or service policy.
+
 The USB test validates both xHCI root hubs, the Intel role switch and the fixed
 XMM7260 `cdc_mbim` transport. It validates attached removable devices without
 logging their identity, or records SKIP when no OTG accessory is connected.
@@ -195,7 +206,9 @@ inserted SD card without writing. `storage-write` performs the separately
 confirmed bounded SD write/read/delete check. `platform` validates the SoC
 driver set, CPU power management, thermal stack, eMMC health, root filesystem
 and RTC wake capability. `power`
-validates battery, charger and UPower telemetry. `sensors`
+validates battery, charger and UPower telemetry. `resources` profiles the three
+Yoga Book resident services and audits thermal safeguards without changing
+policy. `sensors`
 samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control
 paths. `usb` audits the host hubs, role switch, fixed modem path, attached

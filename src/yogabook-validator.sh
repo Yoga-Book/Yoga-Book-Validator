@@ -28,6 +28,7 @@ Commands:
   rotation               Verify all four automatic display orientations
   platform               Inspect SoC, CPU, thermal, eMMC and RTC health
   power                  Validate battery, charger and desktop telemetry
+  resources              Profile Yoga Book services and thermal safeguards
   sensors                Sample every Yoga Book IIO sensor channel
   storage                Read the inserted SD card without writing to it
   storage-write          Write/read/delete a bounded SD filesystem test file
@@ -50,7 +51,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | camera | display | gnss | passive | physical | full | bundle | platform | power | sensors | usb)
+check | camera | display | gnss | passive | physical | full | bundle | platform | power | resources | sensors | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 audio | automated | haptics | inputs | lights | modes | rotation | storage | storage-write | suspend | wireless)
