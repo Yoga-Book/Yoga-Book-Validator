@@ -8,8 +8,10 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import selectors
 import subprocess
 import sys
+import time
 
 
 def clean(value: str) -> str:
@@ -92,17 +94,17 @@ def emit(
 
 def main() -> int:
     analyze_stdin = len(sys.argv) == 7 and sys.argv[1] == "--analyze-stdin"
-    capture = len(sys.argv) == 7 and not analyze_stdin
+    capture = len(sys.argv) == 8 and not analyze_stdin
     if not (analyze_stdin or capture):
         print(
             "Usage: yogabook-validator-camera-capture.py "
-            "DEVICE WIDTH HEIGHT STRIDE FRAME_SIZE FRAMES",
+            "DEVICE WIDTH HEIGHT STRIDE FRAME_SIZE FRAMES PIXEL_FORMAT",
             file=sys.stderr,
         )
         return 2
 
     try:
-        width, height, stride, frame_size, frames = parse_geometry(sys.argv[2:])
+        width, height, stride, frame_size, frames = parse_geometry(sys.argv[2:7])
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
@@ -119,48 +121,81 @@ def main() -> int:
         return 0
 
     device = sys.argv[1]
+    pixel_format = sys.argv[7]
     command = os.environ.get("YBV_V4L2_CTL", "v4l2-ctl")
+    capture_timeout = float(os.environ.get("YBV_CAMERA_CAPTURE_TIMEOUT", "20"))
     actual_frame_size = frame_size
+    process: subprocess.Popen[bytes] | None = None
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [
                 command,
                 "-d",
                 device,
+                (
+                    f"--set-fmt-video=width={width},height={height},"
+                    f"pixelformat={pixel_format}"
+                ),
                 "--stream-mmap=3",
                 f"--stream-count={frames}",
                 "--stream-to=-",
             ],
-            check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=20,
         )
-        payload = completed.stdout
-        actual_frame_size = len(payload) // frames if len(payload) % frames == 0 else 0
-        received = frames if actual_frame_size >= stride * height else 0
-        if completed.returncode == 0 and received == frames:
+        if process.stdout is None or process.stderr is None:
+            raise OSError("capture pipes are unavailable")
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+        selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+        payload_buffer = bytearray()
+        error_buffer = bytearray()
+        deadline = time.monotonic() + capture_timeout
+        target_bytes = frame_size * frames
+        while len(payload_buffer) < target_bytes and selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            events = selector.select(remaining)
+            if not events:
+                break
+            for key, _ in events:
+                chunk = os.read(key.fileobj.fileno(), 1024 * 1024)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                elif key.data == "stdout":
+                    payload_buffer.extend(chunk[: target_bytes - len(payload_buffer)])
+                else:
+                    error_buffer.extend(chunk)
+        payload = bytes(payload_buffer)
+        received = len(payload) // frame_size
+        if received >= frames:
             stream_status = "PASS"
             stream_details = (
-                f"complete_frames={received} actual_frame_bytes={actual_frame_size} "
+                f"complete_frames={received} actual_frame_bytes={frame_size} "
                 f"advertised_frame_bytes={frame_size}"
             )
         else:
             stream_status = "FAIL"
-            error = clean(completed.stderr.decode("utf-8", errors="replace"))
+            error = clean(error_buffer.decode("utf-8", errors="replace"))
+            timed_out = time.monotonic() >= deadline
             stream_details = (
-                f"exit={completed.returncode} bytes={len(payload)} "
+                f"{'timeout=' + str(capture_timeout) + 's ' if timed_out else ''}"
+                f"exit={process.poll()} bytes={len(payload)} "
                 f"expected_frames={frames} error={error or 'none'}"
             )
-    except subprocess.TimeoutExpired as error:
-        payload = error.stdout or b""
-        received = len(payload) // frame_size
-        stream_status = "FAIL"
-        stream_details = f"timeout=20s complete_frames={received} expected={frames}"
     except OSError as error:
         payload = b""
         stream_status = "FAIL"
         stream_details = f"capture_error={clean(str(error))}"
+    finally:
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
     if stream_status == "PASS":
         signal_status, signal_details = analyze(

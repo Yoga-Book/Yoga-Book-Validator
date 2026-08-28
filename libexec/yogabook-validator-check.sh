@@ -70,12 +70,13 @@ check_package() {
 check_package halo-keyboard input
 check_package yogabook-sensors sensors
 check_package alsa-ucm-conf-yogabook audio 1.6
-check_package yogabook-gnss gnss 1.0.1
+check_package yogabook-camera camera 0.2.20
+check_package yogabook-gnss gnss 1.0.3
 check_package yogabook-validator platform "$YBV_VERSION"
-check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook2'
+check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook3'
 
 if ybv_has_command dpkg; then
-	declare -a verify_packages=(yogabook-validator halo-keyboard yogabook-sensors yogabook-gnss alsa-ucm-conf-yogabook libmutter-18-0)
+	declare -a verify_packages=(yogabook-validator halo-keyboard yogabook-sensors yogabook-camera yogabook-gnss alsa-ucm-conf-yogabook libmutter-18-0)
 	declare -a modified_packages=()
 	for package in "${verify_packages[@]}"; do
 		if [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true) != 'install ok installed' ]]; then
@@ -433,21 +434,40 @@ if ((video_count > 0)); then
 else
 	ybv_emit camera video-nodes FAIL 'No camera/video device node is present'
 fi
+
+camera_driver_bound() {
+	local driver_dir=$1 candidate name
+	for candidate in "$driver_dir"/*; do
+		[[ -L $candidate ]] || continue
+		name=${candidate##*/}
+		case $name in
+		*:* | [0-9]*-*) return 0 ;;
+		esac
+	done
+	return 1
+}
+
 if [[ $YBV_SYSROOT == / ]] && ybv_has_command media-ctl; then
 	media_graph=$(timeout 10 media-ctl --print-topology 2>&1 || true)
 	printf '\n===== Camera media topology =====\n%s\n' "$media_graph" >>"$YBV_LOG"
 	if grep -Fq 'driver          atomisp-isp2' <<<"$media_graph"; then
 		ybv_emit camera atomisp PASS 'AtomISP media controller is present'
+	elif camera_driver_bound /sys/bus/pci/drivers/atomisp-isp2; then
+		ybv_emit camera atomisp PASS 'AtomISP media controller is bound' 'sysfs fallback; media topology is not readable by this session'
 	else
 		ybv_emit camera atomisp FAIL 'AtomISP media controller is missing'
 	fi
 	if grep -Fq 'ov2740 2-0010' <<<"$media_graph"; then
 		ybv_emit camera front-sensor PASS 'OV2740 front camera sensor is present'
+	elif camera_driver_bound /sys/bus/i2c/drivers/ov2740; then
+		ybv_emit camera front-sensor PASS 'OV2740 front camera sensor is bound' 'sysfs fallback; media topology is not readable by this session'
 	else
 		ybv_emit camera front-sensor FAIL 'OV2740 front camera sensor is missing'
 	fi
 	if grep -Fq 'ov8858 2-0036' <<<"$media_graph"; then
 		ybv_emit camera rear-sensor PASS 'OV8858 rear camera sensor is present'
+	elif camera_driver_bound /sys/bus/i2c/drivers/ov8858; then
+		ybv_emit camera rear-sensor PASS 'OV8858 rear camera sensor is bound' 'sysfs fallback; media topology is not readable by this session'
 	else
 		ybv_emit camera rear-sensor FAIL 'OV8858 rear camera sensor is missing'
 	fi

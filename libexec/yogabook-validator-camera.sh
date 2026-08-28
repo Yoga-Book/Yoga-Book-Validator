@@ -58,6 +58,7 @@ for identity in 'ov2740 2-0010' 'ov8858 2-0036'; do
 	fi
 done
 focus_device=$(sed -n '/entity .*: wv517s 2-000c/,/^- entity /s/.*device node name \(\/dev\/v4l-subdev[0-9][0-9]*\).*/\1/p' <<<"$media_graph" | head -n 1)
+isp_device=$(sed -n '/entity .*: Atom ISP (/,/^- entity /s/.*device node name \(\/dev\/v4l-subdev[0-9][0-9]*\).*/\1/p' <<<"$media_graph" | head -n 1)
 if [[ -n $focus_device && -e $focus_device ]]; then
 	ybv_emit camera focus-actuator PASS 'WV517S rear-camera focus actuator is present' "$focus_device"
 else
@@ -79,6 +80,12 @@ front_was_enabled=false
 rear_was_enabled=false
 link_enabled 0 && front_was_enabled=true
 link_enabled 1 && rear_was_enabled=true
+
+original_run_mode=
+if [[ -n $isp_device && -e $isp_device ]]; then
+	original_run_mode=$(v4l2-ctl -d "$isp_device" --get-ctrl=atomisp_run_mode 2>>"$YBV_LOG" |
+		sed -n 's/^atomisp_run_mode:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
+fi
 
 set_link() {
 	local port=$1 enabled=$2
@@ -108,6 +115,9 @@ restore_camera_state() {
 	local restore_rc=0
 	restore_focus || restore_rc=1
 	restore_route || restore_rc=1
+	if [[ -n $original_run_mode ]]; then
+		v4l2-ctl -d "$isp_device" --set-ctrl="atomisp_run_mode=$original_run_mode" >>"$YBV_LOG" 2>&1 || restore_rc=1
+	fi
 	return "$restore_rc"
 }
 trap 'restore_camera_state || true' EXIT
@@ -122,10 +132,17 @@ select_route() {
 }
 
 test_camera() {
-	local id=$1 label=$2 port=$3 expected=$4 input format width height stride frame_size
+	local id=$1 label=$2 port=$3 expected=$4 pixel_format=$5 width=$6 height=$7 stride=$8 frame_size=$9
+	local input
 	local capture_result stream_status signal_status stream_details signal_details
 	if ! select_route "$port"; then
 		ybv_emit camera "$id-route" FAIL "Could not select the $label route"
+		return
+	fi
+	if [[ -z $isp_device || ! -e $isp_device ]] ||
+		! v4l2-ctl -d "$isp_device" --set-ctrl=atomisp_run_mode=2 >>"$YBV_LOG" 2>&1; then
+		ybv_emit camera "$id-stream" FAIL "$label raw capture could not be configured"
+		ybv_emit camera "$id-signal" SKIP "$label signal integrity was not analyzed"
 		return
 	fi
 	input=$(v4l2-ctl -d "$video_device" --all 2>&1 | sed -n 's/^[[:space:]]*Video input[[:space:]]*:[[:space:]]*//p' | head -n 1)
@@ -134,17 +151,8 @@ test_camera() {
 	else
 		ybv_emit camera "$id-route" FAIL "$label route did not select $expected" "$input"
 	fi
-	format=$(v4l2-ctl -d "$video_device" --get-fmt-video 2>>"$YBV_LOG" || true)
-	read -r width height < <(sed -n 's/^[[:space:]]*Width\/Height[[:space:]]*:[[:space:]]*\([0-9][0-9]*\)\/\([0-9][0-9]*\).*/\1 \2/p' <<<"$format") || true
-	stride=$(sed -n 's/^[[:space:]]*Bytes per Line[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$format")
-	frame_size=$(sed -n 's/^[[:space:]]*Size Image[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$format")
-	if [[ -z $width || -z $height || -z $stride || -z $frame_size ]]; then
-		ybv_emit camera "$id-stream" FAIL "$label capture geometry is unavailable"
-		ybv_emit camera "$id-signal" SKIP "$label signal integrity was not analyzed"
-		return
-	fi
 	capture_result=$(python3 "$LIBEXEC_DIR/yogabook-validator-camera-capture.py" \
-		"$video_device" "$width" "$height" "$stride" "$frame_size" 3 2>>"$YBV_LOG" || true)
+		"$video_device" "$width" "$height" "$stride" "$frame_size" 3 "$pixel_format" 2>>"$YBV_LOG" || true)
 	IFS=$'\t' read -r stream_status signal_status stream_details signal_details <<<"$capture_result"
 	case $stream_status in
 	PASS) ybv_emit camera "$id-stream" PASS "$label delivered three complete frames" "$stream_details" ;;
@@ -207,8 +215,8 @@ test_focus() {
 	fi
 }
 
-test_camera front 'Front camera' 0 ov2740
-test_camera rear 'Rear camera' 1 ov8858
+test_camera front 'Front camera' 0 ov2740 BA10 1932 1092 4096 4472832
+test_camera rear 'Rear camera' 1 ov8858 BG10 1632 1224 3328 4075520
 test_focus
 
 if restore_camera_state; then

@@ -1,3 +1,13 @@
+yogabook-validator (0.23.2) unstable; urgency=medium
+
+  * Fall back to bound camera drivers when the desktop session cannot read
+    the AtomISP media-controller topology.
+  * Negotiate each sensor's raw format on the capture descriptor and finish
+    validation as soon as three complete in-memory frames arrive.
+  * Require the released Camera, GNSS and Mutter Yoga Book package versions.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Fri, 28 Aug 2026 21:36:00 +0200
+
 yogabook-validator (0.23.1) unstable; urgency=medium
 
   * Attribute expected v4l2loopback out-of-tree and unsigned kernel taints.

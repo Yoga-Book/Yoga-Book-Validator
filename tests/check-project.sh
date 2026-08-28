@@ -170,7 +170,12 @@ grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_vali
 grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
 grep -Fq 'check_package yogabook-validator platform "$YBV_VERSION"' "$root/libexec/yogabook-validator-check.sh"
-grep -Fq "check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook2'" "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'check_package yogabook-camera camera 0.2.20' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'check_package yogabook-gnss gnss 1.0.3' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq "check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook3'" "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'camera_driver_bound /sys/bus/pci/drivers/atomisp-isp2' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'camera_driver_bound /sys/bus/i2c/drivers/ov2740' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'camera_driver_bound /sys/bus/i2c/drivers/ov8858' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'dpkg --verify "$package"' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'package-integrity PASS' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'restart_count_before=' "$root/libexec/yogabook-validator-gnss.sh"
@@ -301,6 +306,10 @@ grep -Fq 'focus_absolute=$focus_original' "$root/libexec/yogabook-validator-came
 grep -Fq 'yogabook-validator-camera-capture.py' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq -- '--stream-to=-' "$root/libexec/yogabook-validator-camera-capture.py"
 grep -Fq 'actual_frame_bytes=' "$root/libexec/yogabook-validator-camera-capture.py"
+grep -Fq 'selectors.DefaultSelector()' "$root/libexec/yogabook-validator-camera-capture.py"
+grep -Fq 'atomisp_run_mode=2' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq "test_camera front 'Front camera' 0 ov2740 BA10 1932 1092 4096 4472832" "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq "test_camera rear 'Rear camera' 1 ov8858 BG10 1632 1224 3328 4075520" "$root/libexec/yogabook-validator-camera.sh"
 if grep -Eq -- '--stream-to=[^ -]|open\(.+wb|write_bytes' "$root/libexec/yogabook-validator-camera-capture.py"; then
 	echo 'camera validation must never store captured image data' >&2
 	exit 1
@@ -316,6 +325,16 @@ frozen_analysis=$(python3 -c 'import sys; sys.stdout.buffer.write(bytes((16, 48,
 incomplete_analysis=$(python3 -c 'import sys; sys.stdout.buffer.write(bytes(12))' |
 	python3 "$root/libexec/yogabook-validator-camera-capture.py" --analyze-stdin 4 2 4 12 3)
 [[ $incomplete_analysis == FAIL$'\t'SKIP$'\t'* ]]
+fake_v4l2="$temporary/fake-v4l2-ctl"
+sed 's/^\t//' >"$fake_v4l2" <<'EOF'
+	#!/usr/bin/env bash
+	printf '\001\002\003\004\005\006\007\010\000\000\000\000%.0s' {1..3}
+	sleep 30
+EOF
+chmod +x "$fake_v4l2"
+capture_result=$(YBV_V4L2_CTL="$fake_v4l2" YBV_CAMERA_CAPTURE_TIMEOUT=2 \
+	python3 "$root/libexec/yogabook-validator-camera-capture.py" /dev/null 4 2 4 12 3 BA10)
+[[ $capture_result == PASS$'\t'* ]]
 grep -Fq 'src" / "yogabook-validator.sh"' "$root/ui/yogabook_validator_ui.py"
 grep -Fq "exclude='*.wav'" "$root/libexec/yogabook-validator-bundle.sh"
 
