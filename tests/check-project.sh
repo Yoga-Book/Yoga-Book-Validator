@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
+# shellcheck disable=SC2016
 
 set -Eeuo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-temporary=$(mktemp -d /tmp/yogabook-validator-test.XXXXXX)
+temporary_root=${TMPDIR:-/tmp}
+temporary=$(mktemp -d "$temporary_root/yogabook-validator-test.XXXXXX")
 cleanup() { rm -rf -- "$temporary"; }
 trap cleanup EXIT
 
@@ -261,7 +263,10 @@ fi
 grep -Fq 'life_time' "$root/libexec/yogabook-validator-platform.sh"
 grep -Fq 'pre_eol_info' "$root/libexec/yogabook-validator-platform.sh"
 grep -Fq 'rtc0 wake=enabled s2idle=selected' "$root/libexec/yogabook-validator-platform.sh"
-grep -Fq 'AtomISP staging' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq '/sys/module/atomisp/taint' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq '/sys/module/v4l2loopback/taint' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'expected_taint | 4096 | 8192' "$root/libexec/yogabook-validator-platform.sh"
+grep -Fq 'flags attributed to required integration modules' "$root/libexec/yogabook-validator-platform.sh"
 grep -Fq 'serial numbers, CID and manufacturer fields are' "$root/README.md"
 grep -Fq 'intel_xhci_usb_sw-role-switch' "$root/libexec/yogabook-validator-usb.sh"
 grep -Fq 'removable USB accessory' "$root/libexec/yogabook-validator-usb.sh"

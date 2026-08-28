@@ -48,7 +48,8 @@ read_state() {
 
 write_state() {
 	local name=$1 value=$2 temporary
-	mkdir -p -m 0700 -- "$state_dir"
+	mkdir -p -- "$state_dir"
+	chmod 0700 "$state_dir"
 	temporary=$(mktemp "$state_dir/.${name}.XXXXXX")
 	printf '%s\n' "$value" >"$temporary"
 	chmod 0600 "$temporary"
@@ -193,7 +194,7 @@ validate_current_boot() {
 }
 
 command_start() {
-	local boots=3 output_dir= baseline_boot baseline_kernel topology firmware report_rc=0
+	local boots=3 output_dir='' baseline_boot baseline_kernel topology firmware report_rc=0
 
 	if (($# > 0)) && [[ $1 != --* ]]; then
 		boots=$1
@@ -205,7 +206,9 @@ command_start() {
 		*) die "unknown start option: $1" ;;
 		esac
 	done
-	[[ $boots =~ ^[1-9][0-9]*$ ]] && ((boots <= 20)) || die 'BOOTS must be an integer from 1 through 20'
+	if [[ ! $boots =~ ^[1-9][0-9]*$ ]] || ((boots > 20)); then
+		die 'BOOTS must be an integer from 1 through 20'
+	fi
 
 	baseline_boot=$(current_boot_id)
 	baseline_kernel=$(running_kernel)
@@ -226,7 +229,7 @@ command_start() {
 }
 
 command_check() {
-	local output_dir= target passed previous_boot expected_kernel expected_topology expected_firmware
+	local output_dir='' target passed previous_boot expected_kernel expected_topology expected_firmware
 	local current report_rc=0
 
 	while (($#)); do

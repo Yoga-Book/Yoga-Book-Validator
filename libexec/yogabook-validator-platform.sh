@@ -217,11 +217,23 @@ fi
 
 taint=$(read_integer /proc/sys/kernel/tainted 2>/dev/null || true)
 if [[ -n $taint ]]; then
-	extra_taint=$((taint & ~1024))
+	expected_taint=0
+	declare -a expected_taint_sources=()
+	atomisp_taint=$(read_value /sys/module/atomisp/taint 2>/dev/null || true)
+	v4l2loopback_taint=$(read_value /sys/module/v4l2loopback/taint 2>/dev/null || true)
+	if [[ $atomisp_taint == *C* ]]; then
+		expected_taint=$((expected_taint | 1024))
+		expected_taint_sources+=("AtomISP=$atomisp_taint")
+	fi
+	if [[ $v4l2loopback_taint == *O* && $v4l2loopback_taint == *E* ]]; then
+		expected_taint=$((expected_taint | 4096 | 8192))
+		expected_taint_sources+=("v4l2loopback=$v4l2loopback_taint")
+	fi
+	extra_taint=$((taint & ~expected_taint))
 	if ((extra_taint == 0)); then
-		ybv_emit platform kernel-taint PASS 'Kernel taint is clean apart from the expected AtomISP staging flag' "taint=$taint"
+		ybv_emit platform kernel-taint PASS 'Kernel taint contains only flags attributed to required integration modules' "taint=$taint sources=${expected_taint_sources[*]:-none}"
 	else
-		ybv_emit platform kernel-taint WARN 'Kernel has additional taint flags beyond AtomISP staging' "taint=$taint extra=$extra_taint"
+		ybv_emit platform kernel-taint WARN 'Kernel has taint flags not attributed to required integration modules' "taint=$taint expected=$expected_taint extra=$extra_taint sources=${expected_taint_sources[*]:-none}"
 	fi
 else
 	ybv_emit platform kernel-taint FAIL 'Kernel taint state is unreadable'

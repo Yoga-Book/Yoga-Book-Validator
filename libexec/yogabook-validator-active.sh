@@ -238,7 +238,7 @@ PY
 
 desktop_audio_probe() {
 	local monitor_pid playback_probe_pid playback_rc=0 monitor_rc=0
-	local default_sink= sink_running=false pcm_running=false signal=
+	local default_sink='' sink_running=false pcm_running=false signal=''
 
 	: >"$desktop_probe_file"
 	default_sink=$(ybv_run_as_user "$real_user" timeout 3 pactl get-default-sink 2>/dev/null) || return 1
@@ -502,10 +502,12 @@ else
 	playback_pid=
 	if wait "$capture_pid"; then ybv_emit suspend capture-after PASS 'Capture completed after resume'; else ybv_emit suspend capture-after FAIL 'Capture failed across suspend'; fi
 	capture_pid=
-	printf '\n===== Suspend playback client =====\n' >>"$YBV_LOG"
-	cat "$playback_log" >>"$YBV_LOG"
-	printf '\n===== Suspend capture client =====\n' >>"$YBV_LOG"
-	cat "$capture_log" >>"$YBV_LOG"
+	{
+		printf '\n===== Suspend playback client =====\n'
+		cat "$playback_log"
+		printf '\n===== Suspend capture client =====\n'
+		cat "$capture_log"
+	} >>"$YBV_LOG"
 	xrun_count=$(awk 'BEGIN { IGNORECASE=1 } /underrun|overrun/ { count++ } END { print count + 0 }' "$playback_log" "$capture_log")
 	if ((xrun_count > 0)); then
 		xrun_details=$(awk 'BEGIN { IGNORECASE=1 } /underrun|overrun/ { print; if (++count == 2) exit }' "$playback_log" "$capture_log" | tr '\n' ' ')

@@ -17,10 +17,10 @@ done
 
 ybv_require_x91l || { echo 'ERROR: resource tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 sample_seconds=${YBV_RESOURCE_SAMPLE_SECONDS:-3}
-[[ $sample_seconds =~ ^[1-9][0-9]*$ ]] && ((sample_seconds <= 30)) || {
+if [[ ! $sample_seconds =~ ^[1-9][0-9]*$ ]] || ((sample_seconds > 30)); then
 	echo 'ERROR: YBV_RESOURCE_SAMPLE_SECONDS must be between 1 and 30' >&2
 	exit 2
-}
+fi
 
 ybv_begin_report resources "$output_dir"
 

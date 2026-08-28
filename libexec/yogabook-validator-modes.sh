@@ -275,7 +275,7 @@ sensor_transform_matches() {
 exercise_all_orientations() {
 	local trace_file="$YBV_REPORT_DIR/mode-transition.tsv"
 	local deadline=$((SECONDS + transition_timeout)) line timestamp monotonic sensor
-	local connector mode transform expected pair last_pair= last_monotonic= consecutive=0
+	local connector mode transform expected pair last_pair='' last_monotonic='' consecutive=0
 	local completed=false missing
 	local -a orientations=(right-up normal bottom-up left-up)
 	declare -A observed=()
