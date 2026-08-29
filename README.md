@@ -48,7 +48,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.23.2_all.deb
+sudo apt install ../yogabook-validator_0.26.7_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -57,6 +57,12 @@ Open **Yoga Book Validator** from the application menu, or run:
 yogabook-validator automated
 yogabook-validator check
 yogabook-validator passive
+yogabook-validator category recommended
+yogabook-validator category audio-media
+yogabook-validator category input-modes
+yogabook-validator category platform-power
+yogabook-validator category connectivity-storage
+yogabook-validator category reliability
 yogabook-validator audio
 yogabook-validator camera
 yogabook-validator display
@@ -84,9 +90,30 @@ yogabook-validator physical
 Add `--include-suspend` to `automated` only when an automatic eight-second
 suspend/resume cycle is appropriate.
 
-The UI and CLI save `results.tsv` and `validator.log` under the user's results
-directory. The active audio and suspend tests ask for confirmation and Polkit
-authorization. The quick passive audit and full passive suite need neither.
+The UI and CLI save one evidence directory per run. `results.tsv` and
+`validator.log` remain the raw authoritative evidence. Every completed run also
+produces a versioned `report.json`, a readable `report.md`, a self-contained
+`report.html`, and a privacy-safe `environment.tsv`. The generated diagnostic
+report separates individual checks from suite roll-ups, so a failed subsystem
+is not counted twice; it includes coverage, subsystem health, prioritized
+findings, suggested next actions, and SHA-256 hashes for the raw evidence.
+
+Use `yogabook-validator report DIRECTORY` to regenerate the derived formats
+from an older raw report. Active hardware tests and category suites ask for
+confirmation and Polkit authorization. The quick passive audit and full
+passive suite need neither.
+
+Every UI category has a compact **Run all checks** action in its header.
+Compatible checks execute in a deterministic sequence, share one report and
+request administrator access once. While a category is active, its header
+spinner remains visible and the currently executing validation row shows its
+own spinner before resolving to its individual pass/fail status.
+`category recommended` runs the union of the overlapping recommended workflows
+without repeating their checks. The reliability category performs suspend/resume and
+then starts, advances or confirms the persistent cold-boot workflow; when a
+physical cold boot is still required, it records SKIP instead of manufacturing
+a same-boot failure. Physical acceptance uses its single guided form because
+all checks require operator observation.
 
 Cold-boot stability tracking is read-only and never reboots or changes GRUB.
 `stability start 3` validates and records the current kernel, boot ID, SOF
@@ -97,6 +124,17 @@ cannot distinguish a cold boot from an ordinary reboot, so the operator must
 perform the physical power cycle. `stability status` never changes progress.
 
 ## Safety model
+
+Every command captures a deterministic mutable-state snapshot before running
+and compares it after cleanup. The contract covers backlight and LED state,
+Bluetooth/rfkill, Yoga Book and desktop-audio service state, writable ALSA controls,
+the active desktop audio profile, orientation settings, Mutter layout,
+removable-media mounts and Validator temporary mounts. A mismatch is a real
+`validator/state-preservation` failure with `state-before.tsv`,
+`state-after.tsv` and `state-diff.txt` evidence. State-changing runners also
+register an idempotent cleanup callback that runs before the comparison, on
+both successful and failed checks; their existing exit traps remain the final
+safety net for interruption.
 
 The audio and suspend helper is restricted to YB1-X91L by DMI. Before stopping
 WirePlumber it snapshots the live ALSA state. It restores that state and starts
@@ -113,12 +151,15 @@ the saved mixer state. Report bundles exclude WAV recordings
 and ALSA state snapshots because they may contain personal or machine-specific
 data.
 
-The camera test records which AtomISP sensor links were active, captures three
-frames from each sensor into bounded process memory, checks complete payloads,
+The camera test requests administrator authorization because physical AtomISP
+nodes are intentionally private to the system image processor. It records the
+active processor and sensor state, pauses the processor, captures three frames
+from each sensor into bounded process memory, checks complete payloads,
 luminance variation and frame-to-frame change, then immediately discards the
 bytes. It also moves the WV517S rear focus actuator by one position and restores
-the original position. It restores focus and links on success, failure,
-interruption, or timeout and never stores or logs an image.
+the original position. It restores focus, the selected V4L2 input and the
+processor service on success, failure, interruption, or timeout and never
+stores or logs an image.
 
 The sensor test reads every raw ALS, accelerometer, hinge-angle and proximity
 channel and confirms that SensorProxy returns live desktop values. The lights
@@ -202,10 +243,11 @@ identities and does not remount an existing read-only filesystem.
 quick audit with the deeper platform, display, sensor, power, USB and GNSS
 checks without administrator access or state changes. `audio` tests PCM0 playback and
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
-playback, the bounded tone, and non-empty Mic1 capture. `camera` switches the
-AtomISP media route, validates three in-memory frames from each sensor for
+playback, the bounded tone, and non-empty Mic1 capture. `camera` pauses the
+desktop image processor, switches the private AtomISP input, validates three
+in-memory frames from each sensor for
 payload and signal integrity, exercises one bounded rear-focus step, discards
-the frames and restores the original focus and route.
+the frames and restores the original focus, input and processor state.
 `display` inspects the live i915, DSI, Micro-HDMI DRM and LPE audio, Mutter and
 GNOME Shell display stack without changing it. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without

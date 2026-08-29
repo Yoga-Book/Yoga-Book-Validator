@@ -88,6 +88,7 @@ for name in "${led_names[@]}"; do
 	}
 done
 state_saved=true
+ybv_register_restore_callback restore_lights
 
 read -r panel_max <"$backlight/max_brightness"
 if ((panel_max > 1)); then

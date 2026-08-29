@@ -79,10 +79,10 @@ else
 	ybv_finish_report_for_user "$real_user" || true
 	exit 1
 fi
-initial_power=$(bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
+initial_power=$(timeout 5 bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
 [[ $initial_power == yes || $initial_power == no ]] || initial_power=no
 
-controller_info=$(btmgmt --index "$controller_index" info 2>/dev/null || true)
+controller_info=$(timeout 5 btmgmt --index "$controller_index" info 2>/dev/null || true)
 supported_settings=$(sed -n 's/^[[:space:]]*supported settings: //p' <<<"$controller_info" | head -n 1)
 required_settings=(powered connectable discoverable bondable ssp br/edr le advertising secure-conn privacy phy-configuration)
 missing_settings=()
@@ -99,7 +99,7 @@ fi
 
 restore_wireless() {
 	local restore_rc=0 current_soft current_power
-	btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
+	timeout 5 btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
 	rfkill unblock bluetooth || restore_rc=1
 	sleep 1
 	if [[ $initial_power == yes ]]; then
@@ -112,11 +112,12 @@ restore_wireless() {
 	fi
 	sleep 1
 	current_soft=$(<"$rfkill_path/soft")
-	current_power=$(bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
+	current_power=$(timeout 5 bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
 	[[ $current_soft == "$initial_soft" ]] || restore_rc=1
 	[[ $current_power == "$initial_power" ]] || restore_rc=1
 	return "$restore_rc"
 }
+ybv_register_restore_callback restore_wireless
 trap 'restore_wireless || true' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -127,7 +128,7 @@ if rfkill unblock bluetooth; then
 	for _ in {1..5}; do
 		sleep 1
 		power_output=$(timeout 5 btmgmt --index "$controller_index" power on 2>&1 || true)
-		if bluetoothctl show 2>/dev/null | grep -Fq 'Powered: yes'; then
+		if timeout 5 bluetoothctl show 2>/dev/null | grep -Fq 'Powered: yes'; then
 			powered=true
 			break
 		fi
@@ -157,7 +158,7 @@ elif grep -Fq 'Discovery started' <<<"$discovery_output"; then
 else
 	ybv_emit wireless bluetooth-rf FAIL 'Bluetooth RF reception could not be exercised'
 fi
-btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
+timeout 5 btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
 
 if restore_wireless; then
 	ybv_emit wireless state-restore PASS 'Restored the original Bluetooth power and rfkill state' "powered=$initial_power soft-blocked=$initial_soft"

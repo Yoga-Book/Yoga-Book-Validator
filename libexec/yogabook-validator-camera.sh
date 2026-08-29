@@ -25,11 +25,56 @@ if [[ $assume_yes != true ]]; then
 fi
 
 ybv_require_x91l || { echo 'ERROR: camera tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
+[[ $EUID -eq 0 ]] || { echo 'ERROR: camera tests require root access to private AtomISP devices' >&2; exit 2; }
 for required in media-ctl python3 v4l2-ctl; do
 	ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
 done
 
 ybv_begin_report camera "$output_dir"
+real_user=$(ybv_real_user)
+camera_service=yogabook-camera.service
+camera_service_was_running=false
+camera_service_stopped=false
+camera_service_initial_state=inactive
+if systemctl cat "$camera_service" >/dev/null 2>&1; then
+	camera_service_initial_state=$(systemctl show "$camera_service" -p ActiveState --value 2>/dev/null || printf 'inactive')
+	camera_service_main_pid=$(systemctl show "$camera_service" -p MainPID --value 2>/dev/null || printf '0')
+	if [[ $camera_service_main_pid =~ ^[1-9][0-9]*$ ]]; then
+		camera_service_was_running=true
+	fi
+fi
+
+restore_camera_service() {
+	local current_state main_pid
+	[[ $camera_service_stopped == true && $camera_service_was_running == true ]] || return 0
+	systemctl start --no-block "$camera_service" >>"$YBV_LOG" 2>&1 || return 1
+	camera_service_stopped=false
+	for _ in {1..600}; do
+		current_state=$(systemctl show "$camera_service" -p ActiveState --value 2>/dev/null || true)
+		main_pid=$(systemctl show "$camera_service" -p MainPID --value 2>/dev/null || true)
+		if [[ $main_pid =~ ^[1-9][0-9]*$ && $current_state == "$camera_service_initial_state" ]]; then
+			return 0
+		fi
+		sleep 0.1
+	done
+	return 1
+}
+ybv_register_restore_callback restore_camera_service
+trap 'restore_camera_service || true' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [[ $camera_service_was_running == true ]]; then
+	if systemctl stop "$camera_service" >>"$YBV_LOG" 2>&1; then
+		camera_service_stopped=true
+		ybv_emit camera processor-pause INFO 'Paused the desktop camera processor for exclusive raw validation'
+	else
+		ybv_emit camera processor-pause FAIL 'Could not pause the desktop camera processor safely'
+		ybv_finish_report_for_user "$real_user"
+		exit 1
+	fi
+fi
+
 media_device=
 media_graph=
 for candidate in /dev/media*; do
@@ -45,7 +90,7 @@ done
 video_device=$(sed -n '/entity .*: ATOMISP video output/,/entity /s/.*device node name \(\/dev\/video[0-9][0-9]*\).*/\1/p' <<<"$media_graph" | head -n 1)
 if [[ -z $media_device || -z $video_device || ! -e $video_device ]]; then
 	ybv_emit camera atomisp FAIL 'AtomISP media and video devices could not be discovered'
-	ybv_finish_report
+	ybv_finish_report_for_user "$real_user"
 	exit 1
 fi
 ybv_emit camera atomisp PASS 'AtomISP capture devices are present' "$media_device $video_device"
@@ -82,26 +127,20 @@ link_enabled 0 && front_was_enabled=true
 link_enabled 1 && rear_was_enabled=true
 
 original_run_mode=
+original_input=$(v4l2-ctl -d "$video_device" --get-input 2>>"$YBV_LOG" |
+	sed -n 's/^Video input[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)
 if [[ -n $isp_device && -e $isp_device ]]; then
 	original_run_mode=$(v4l2-ctl -d "$isp_device" --get-ctrl=atomisp_run_mode 2>>"$YBV_LOG" |
 		sed -n 's/^atomisp_run_mode:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
 fi
 
-set_link() {
-	local port=$1 enabled=$2
-	media-ctl -d "$media_device" --links "\"ATOM ISP CSI2-port${port}\":1 -> \"Atom ISP\":0 [$enabled]" >>"$YBV_LOG" 2>&1
-}
-
 restore_route() {
-	local restore_rc=0
-	set_link 0 0 || restore_rc=1
-	set_link 1 0 || restore_rc=1
-	if [[ $front_was_enabled == true ]]; then set_link 0 1 || restore_rc=1; fi
-	if [[ $rear_was_enabled == true ]]; then set_link 1 1 || restore_rc=1; fi
-	return "$restore_rc"
+	[[ $original_input =~ ^[0-9]+$ ]] || return 1
+	v4l2-ctl -d "$video_device" --set-input="$original_input" >>"$YBV_LOG" 2>&1
 }
 focus_original=
 focus_changed=false
+camera_state_restored=false
 restore_focus() {
 	local restored
 	[[ $focus_changed == true ]] || return 0
@@ -113,22 +152,24 @@ restore_focus() {
 }
 restore_camera_state() {
 	local restore_rc=0
+	[[ $camera_state_restored == true ]] && return 0
 	restore_focus || restore_rc=1
 	restore_route || restore_rc=1
 	if [[ -n $original_run_mode ]]; then
 		v4l2-ctl -d "$isp_device" --set-ctrl="atomisp_run_mode=$original_run_mode" >>"$YBV_LOG" 2>&1 || restore_rc=1
 	fi
+	restore_camera_service || restore_rc=1
+	[[ $restore_rc -ne 0 ]] || camera_state_restored=true
 	return "$restore_rc"
 }
+ybv_register_restore_callback restore_camera_state
 trap 'restore_camera_state || true' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
 select_route() {
 	local port=$1
-	set_link 0 0
-	set_link 1 0
-	set_link "$port" 1
+	v4l2-ctl -d "$video_device" --set-input="$port" >>"$YBV_LOG" 2>&1
 }
 
 test_camera() {
@@ -227,4 +268,4 @@ else
 fi
 
 YBV_PHYSICAL_RESULT=PENDING
-ybv_finish_report
+ybv_finish_report_for_user "$real_user"

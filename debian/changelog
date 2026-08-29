@@ -1,3 +1,122 @@
+yogabook-validator (0.26.7) unstable; urgency=medium
+
+  * Keep status indicators and run controls in fixed-width columns, aligned by
+    their left edges across category headers and individual validation rows.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 01:27:00 +0200
+
+yogabook-validator (0.26.6) unstable; urgency=medium
+
+  * Mirror category progress onto the currently executing validation row while
+    retaining the category-level spinner.
+  * Complete each subtest row with its own pass/fail result and preserve nested
+    progress for optimized recommended workflows.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 01:00:00 +0200
+
+yogabook-validator (0.26.5) unstable; urgency=medium
+
+  * Make camera restoration idempotent so the mandatory final cleanup pass
+    does not reopen private AtomISP controls after the processor has resumed.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 00:21:00 +0200
+
+yogabook-validator (0.26.4) unstable; urgency=medium
+
+  * Run private AtomISP camera validation with administrator authorization
+    instead of reporting a false discovery failure for the desktop user.
+  * Pause and restore the Yoga Book camera processor around exclusive raw
+    validation, including failure and cancellation paths.
+  * Select and restore sensors through the V4L2 input API used by the camera
+    runtime, and keep camera checks privileged inside combined suites.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 00:14:00 +0200
+
+yogabook-validator (0.26.3) unstable; urgency=medium
+
+  * Enlarge category actions and align their trailing edge with individual
+    validation controls for a clearer visual hierarchy.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 23:52:00 +0200
+
+yogabook-validator (0.26.2) unstable; urgency=medium
+
+  * Replace every remaining text Run action with the same compact, accessible
+    play/stop icon control used by category headers.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 23:44:00 +0200
+
+yogabook-validator (0.26.1) unstable; urgency=medium
+
+  * Compare only writable ALSA controls during state-preservation validation
+    and retain their exact names and values for actionable diffs.
+  * Exclude read-only jack and status controls that can change asynchronously
+    and cannot be restored by the Validator.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 23:19:00 +0200
+
+yogabook-validator (0.26.0) unstable; urgency=medium
+
+  * Replace category text actions with compact accessible play/stop controls.
+  * Snapshot observable mutable state before every test and suite, run
+    registered cleanup before completion, and fail validation on any mismatch.
+  * Preserve before/after snapshots and diffs as hashed diagnostic evidence.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 23:12:00 +0200
+
+yogabook-validator (0.25.0) unstable; urgency=medium
+
+  * Group validation actions by subsystem-oriented categories.
+  * Add one-click, sequential category suites with one authorization, one Stop
+    control and one merged diagnostic report.
+  * Optimize overlapping recommended workflows and adapt cold-boot reliability
+    checks to their persistent state instead of producing same-boot failures.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 22:55:00 +0200
+
+yogabook-validator (0.24.0) unstable; urgency=medium
+
+  * Generate versioned JSON, Markdown and self-contained HTML diagnostics for
+    every completed validation run.
+  * Separate independent checks from suite roll-ups so root findings are not
+    double-counted, and add subsystem health, coverage, evidence hashes and
+    prioritized remediation guidance.
+  * Add a live non-duplicated result summary and direct detailed-report access
+    to the GTK interface.
+  * Record a privacy-safe environment snapshot alongside each report.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 22:35:00 +0200
+
+yogabook-validator (0.23.6) unstable; urgency=medium
+
+  * Discover the Yoga Book PipeWire card from its stable ALSA identity instead
+    of the obsolete platform-cht-yogabook node name.
+  * Restore the captured profile through the discovered runtime card name.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 15:05:42 +0200
+
+yogabook-validator (0.23.5) unstable; urgency=medium
+
+  * Show a per-row spinner while validation is running.
+  * Preserve per-row passed, failed or cancelled status after completion.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 14:58:45 +0200
+
+yogabook-validator (0.23.4) unstable; urgency=medium
+
+  * Turn the active Run button into a Stop control while validation is running.
+  * Cancel privileged process groups through a report-scoped request file so
+    hardware restoration traps can complete before the UI returns to idle.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 14:52:35 +0200
+
+yogabook-validator (0.23.3) unstable; urgency=medium
+
+  * Bound Bluetooth management commands so wireless validation cannot hang.
+  * Stream commands and test progress into a resizable side console in the UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sat, 29 Aug 2026 14:42:03 +0200
+
 yogabook-validator (0.23.2) unstable; urgency=medium
 
   * Fall back to bound camera drivers when the desktop session cannot read

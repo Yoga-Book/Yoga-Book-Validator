@@ -3,13 +3,17 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.23.2
+YBV_VERSION=0.26.7
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
 YBV_FAILURES=0
 YBV_WARNINGS=0
 YBV_AUTO_REPORT_OWNER=
+YBV_RESTORE_CALLBACK=
+YBV_STATE_BEFORE=
+YBV_STATE_AFTER=
+YBV_COMMON_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 ybv_path() {
 	local path=$1
@@ -49,13 +53,171 @@ ybv_begin_report() {
 	fi
 	YBV_REPORT="$YBV_REPORT_DIR/results.tsv"
 	YBV_LOG="$YBV_REPORT_DIR/validator.log"
+	YBV_ENVIRONMENT="$YBV_REPORT_DIR/environment.tsv"
+	YBV_STATE_BEFORE="$YBV_REPORT_DIR/state-before.tsv"
+	YBV_STATE_AFTER="$YBV_REPORT_DIR/state-after.tsv"
 	printf 'timestamp\tsubsystem\tcheck_id\tstatus\tsummary\tdetails\n' >"$YBV_REPORT"
+	{
+		printf 'key\tvalue\n'
+		printf 'device\t%s\n' "$(ybv_sanitize "$(ybv_read_first /sys/class/dmi/id/product_name)")"
+		printf 'kernel\t%s\n' "$(ybv_sanitize "$(uname -srmo 2>/dev/null || true)")"
+		printf 'architecture\t%s\n' "$(ybv_sanitize "$(uname -m 2>/dev/null || true)")"
+		printf 'operating_system\t%s\n' "$(ybv_sanitize "$(sed -n 's/^PRETTY_NAME=//p' "$(ybv_path /etc/os-release)" 2>/dev/null | head -n 1 | tr -d '\"')")"
+		printf 'boot_id\t%s\n' "$(ybv_sanitize "$(ybv_read_first /proc/sys/kernel/random/boot_id)")"
+		printf 'desktop\t%s\n' "$(ybv_sanitize "${XDG_CURRENT_DESKTOP:-unknown}")"
+		printf 'session_type\t%s\n' "$(ybv_sanitize "${XDG_SESSION_TYPE:-unknown}")"
+	} >"$YBV_ENVIRONMENT"
 	{
 		printf 'Yoga Book Validator %s\n' "$YBV_VERSION"
 		printf 'Command: %s\n' "$command_name"
 		printf 'Started: %s\n' "$(date --iso-8601=seconds)"
 		printf 'Report directory: %s\n\n' "$YBV_REPORT_DIR"
 	} >"$YBV_LOG"
+	if ! ybv_capture_state_snapshot "$YBV_STATE_BEFORE"; then
+		printf 'STATE_SNAPSHOT_ERROR: initial state capture failed\n' | tee -a "$YBV_LOG" >&2
+	fi
+}
+
+ybv_register_restore_callback() {
+	local callback=$1
+	[[ $callback =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || return 2
+	declare -F "$callback" >/dev/null || return 2
+	YBV_RESTORE_CALLBACK=$callback
+}
+
+ybv_snapshot_sysfs_values() {
+	local class_dir=$1
+	shift
+	local directory attribute value name
+	[[ -d $class_dir ]] || return 0
+	for directory in "$class_dir"/*; do
+		[[ -e $directory ]] || continue
+		name=${directory##*/}
+		for attribute in "$@"; do
+			[[ -r $directory/$attribute ]] || continue
+			value=$(tr '\n\t' '  ' <"$directory/$attribute" 2>/dev/null || true)
+			printf 'sysfs:%s:%s\t%s\n' "$name" "$attribute" "$(ybv_sanitize "$value")"
+		done
+	done
+}
+
+ybv_snapshot_led_state() {
+	local class_dir=$1 directory name triggers current brightness
+	[[ -d $class_dir ]] || return 0
+	for directory in "$class_dir"/*; do
+		[[ -e $directory && -r $directory/trigger ]] || continue
+		name=${directory##*/}
+		triggers=$(tr '\n\t' '  ' <"$directory/trigger" 2>/dev/null || true)
+		current=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' <<<"$triggers")
+		printf 'sysfs:%s:trigger\t%s\n' "$name" "$(ybv_sanitize "$current")"
+		# Trigger-driven brightness may change asynchronously and is not mutable
+		# policy. Compare brightness only when userspace owns a steady value.
+		if [[ $current == none && -r $directory/brightness ]]; then
+			brightness=$(tr '\n\t' '  ' <"$directory/brightness" 2>/dev/null || true)
+			printf 'sysfs:%s:brightness\t%s\n' "$name" "$(ybv_sanitize "$brightness")"
+		fi
+	done
+}
+
+ybv_capture_state_snapshot() {
+	local output=$1 temporary real_user user_uid unit state restarts source fstype options
+	local sysroot=${YBV_SYSROOT%/}
+	[[ -n $sysroot ]] || sysroot=/
+	temporary=$(mktemp "${output}.XXXXXX") || return 1
+	{
+		printf 'schema\torg.yogabook.validator.state/v1\n'
+		ybv_snapshot_sysfs_values "$sysroot/sys/class/backlight" brightness
+		ybv_snapshot_led_state "$sysroot/sys/class/leds"
+		ybv_snapshot_sysfs_values "$sysroot/sys/class/rfkill" type name soft hard
+
+		if [[ $YBV_SYSROOT == / ]]; then
+			for unit in halo-keyboard.service yogabook-camera.service yogabook-gnss.service \
+				iio-sensor-proxy.service bluetooth.service ModemManager.service; do
+				state=$(systemctl show "$unit" --property=ActiveState,SubState --value 2>/dev/null | tr '\n' '/' || true)
+				restarts=$(systemctl show "$unit" --property=NRestarts --value 2>/dev/null || true)
+				printf 'system-service:%s\tstate=%s restarts=%s\n' "$unit" "${state%/}" "${restarts:-unknown}"
+			done
+
+			real_user=$(ybv_real_user)
+			if [[ -n $real_user && $real_user != root ]] && id "$real_user" >/dev/null 2>&1; then
+				user_uid=$(id -u "$real_user")
+				for unit in pipewire.service pipewire-pulse.service wireplumber.service; do
+					state=$(ybv_run_as_user "$real_user" systemctl --user show "$unit" \
+						--property=ActiveState,SubState --value 2>/dev/null | tr '\n' '/' || true)
+					printf 'user-service:%s:%s\t%s\n' "$user_uid" "$unit" "${state%/}"
+				done
+				if command -v gsettings >/dev/null 2>&1; then
+					printf 'desktop:orientation-lock\t%s\n' "$(ybv_run_as_user "$real_user" gsettings get org.gnome.settings-daemon.peripherals.touchscreen orientation-lock 2>/dev/null || true)"
+					printf 'desktop:screen-keyboard\t%s\n' "$(ybv_run_as_user "$real_user" gsettings get org.gnome.desktop.a11y.applications screen-keyboard-enabled 2>/dev/null || true)"
+				fi
+				if declare -F ybv_mutter_state >/dev/null; then
+					printf 'desktop:mutter\t%s\n' "$(ybv_mutter_state "$real_user" 2>/dev/null | tr '\n' ';' || true)"
+				fi
+				if command -v pactl >/dev/null 2>&1; then
+					ybv_run_as_user "$real_user" timeout 4 pactl list cards 2>/dev/null |
+						awk '
+							/^[[:space:]]*Name:/ { card=$2 }
+							/^[[:space:]]*alsa\.id = "yogabook"$/ { target=card }
+							/^[[:space:]]*Active Profile:/ && card == target {
+								sub(/^[[:space:]]*Active Profile:[[:space:]]*/, "")
+								print "desktop:audio-profile\\t" target " profile=" $0
+							}
+						' || true
+				fi
+			fi
+
+			if command -v amixer >/dev/null 2>&1; then
+				timeout 5 amixer -c yogabook contents 2>/dev/null |
+					awk '
+						/^numid=/ { control=$0; writable=0; next }
+						/^[[:space:]]*; type=/ { writable=($0 ~ /access=rw/); next }
+						writable && /^[[:space:]]*: values=/ {
+							values=$0
+							sub(/^[[:space:]]*: values=/, "", values)
+							print "audio:alsa-control:" control "\\t" values
+						}
+					' || true
+			fi
+			if command -v btmgmt >/dev/null 2>&1; then
+				state=$(timeout 5 btmgmt info 2>/dev/null | sed -n 's/^[[:space:]]*current settings: /settings=/p' | head -n 1 || true)
+				[[ -z $state ]] || printf 'bluetooth:controller\t%s\n' "$state"
+			fi
+			if command -v findmnt >/dev/null 2>&1; then
+				while read -r source fstype options; do
+					[[ $source == /dev/mmcblk* ]] || continue
+					printf 'mount:%s\tfstype=%s options=%s\n' "${source##*/}" "$fstype" "$options"
+				done < <(findmnt -rn -o SOURCE,FSTYPE,OPTIONS 2>/dev/null)
+			fi
+			printf 'temporary:validator-mounts\t%s\n' "$(find /run -maxdepth 1 -type d -name 'yogabook-validator-*' -printf '%f\n' 2>/dev/null | sort | tr '\n' ',' || true)"
+		fi
+	} | LC_ALL=C sort >"$temporary"
+	mv -f -- "$temporary" "$output"
+}
+
+ybv_verify_state_preservation() {
+	local callback_rc=0 diff_file="$YBV_REPORT_DIR/state-diff.txt"
+	if [[ -n $YBV_RESTORE_CALLBACK ]]; then
+		"$YBV_RESTORE_CALLBACK" || callback_rc=$?
+	fi
+	if ((callback_rc != 0)); then
+		ybv_emit validator cleanup FAIL 'Registered cleanup did not complete successfully' "callback=$YBV_RESTORE_CALLBACK exit=$callback_rc"
+	fi
+	if [[ ! -s $YBV_STATE_BEFORE ]]; then
+		ybv_emit validator state-preservation FAIL 'Initial mutable-state snapshot is unavailable'
+		return 1
+	fi
+	if ! ybv_capture_state_snapshot "$YBV_STATE_AFTER"; then
+		ybv_emit validator state-preservation FAIL 'Final mutable-state snapshot could not be captured'
+		return 1
+	fi
+	if cmp -s -- "$YBV_STATE_BEFORE" "$YBV_STATE_AFTER"; then
+		rm -f -- "$diff_file"
+		ybv_emit validator state-preservation PASS 'Observable mutable state matches the pre-test snapshot'
+		return "$callback_rc"
+	fi
+	diff -u -- "$YBV_STATE_BEFORE" "$YBV_STATE_AFTER" >"$diff_file" || true
+	ybv_emit validator state-preservation FAIL 'Observable mutable state differs from the pre-test snapshot' 'See state-diff.txt'
+	return 1
 }
 
 ybv_emit() {
@@ -79,6 +241,8 @@ ybv_emit() {
 
 ybv_finish_report() {
 	local automated=${1:-true} result=PASS
+	local renderer=${YBV_REPORT_RENDERER:-$YBV_COMMON_DIR/yogabook-validator-report.py}
+	ybv_verify_state_preservation || true
 	if ((YBV_FAILURES > 0)); then
 		result=FAIL
 	fi
@@ -88,6 +252,13 @@ ybv_finish_report() {
 		printf 'Failures: %d\nWarnings: %d\n' "$YBV_FAILURES" "$YBV_WARNINGS"
 		printf 'Finished: %s\n' "$(date --iso-8601=seconds)"
 	} | tee -a "$YBV_LOG"
+	if command -v python3 >/dev/null 2>&1 && [[ -r $renderer ]]; then
+		if ! python3 "$renderer" "$YBV_REPORT_DIR"; then
+			printf 'REPORT_GENERATION_ERROR: JSON, Markdown and HTML rendering failed\n' | tee -a "$YBV_LOG" >&2
+		fi
+	else
+		printf 'REPORT_GENERATION_ERROR: report renderer or Python 3 is unavailable\n' | tee -a "$YBV_LOG" >&2
+	fi
 	if [[ -n $YBV_AUTO_REPORT_OWNER ]]; then
 		ybv_chown_tree_to_user "$YBV_AUTO_REPORT_OWNER" "$YBV_REPORT_DIR" 2>/dev/null || true
 	fi

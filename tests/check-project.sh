@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
-# shellcheck disable=SC2016
+# shellcheck disable=SC2016,SC2030,SC2031
 
 set -Eeuo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -13,6 +13,8 @@ required=(
 	README.md ATTRIBUTION.md CONTRIBUTING.md LICENSE Makefile
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
+	libexec/yogabook-validator-category.sh
+	libexec/yogabook-validator-report.py
 	libexec/yogabook-validator-active.sh libexec/yogabook-validator-automated.sh
 	libexec/yogabook-validator-camera.sh
 	libexec/yogabook-validator-camera-capture.py
@@ -66,6 +68,39 @@ if command -v shellcheck >/dev/null; then
 	shellcheck -x -P "$root/libexec" "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py" "$root"/libexec/*.py
+python3 "$root/tests/test-report.py"
+state_guard_root="$temporary/state-guard-root"
+mkdir -p "$state_guard_root/sys/class/backlight/panel"
+printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
+(
+	export YBV_SYSROOT="$state_guard_root"
+	export YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py"
+	# shellcheck source=../libexec/yogabook-validator-common.sh
+	. "$root/libexec/yogabook-validator-common.sh"
+	ybv_begin_report state-guard-failure "$temporary/state-guard-failure"
+	printf '11\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
+	finish_rc=0
+	ybv_finish_report || finish_rc=$?
+	[[ $finish_rc -eq 1 ]]
+)
+grep -Eq $'validator\tstate-preservation\tFAIL\t' "$temporary/state-guard-failure/results.tsv"
+grep -Fq 'sysfs:panel:brightness' "$temporary/state-guard-failure/state-diff.txt"
+printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
+(
+	export YBV_SYSROOT="$state_guard_root"
+	export YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py"
+	# shellcheck source=../libexec/yogabook-validator-common.sh
+	. "$root/libexec/yogabook-validator-common.sh"
+	# Passed by name to ybv_register_restore_callback.
+	# shellcheck disable=SC2329
+	restore_test_panel() { printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"; }
+	ybv_begin_report state-guard-restore "$temporary/state-guard-restore"
+	ybv_register_restore_callback restore_test_panel
+	printf '11\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
+	ybv_finish_report
+)
+grep -Eq $'validator\tstate-preservation\tPASS\t' "$temporary/state-guard-restore/results.tsv"
+test ! -e "$temporary/state-guard-restore/state-diff.txt"
 python3 - <<PY
 import ast
 import xml.etree.ElementTree as ET
@@ -111,6 +146,12 @@ grep -Fq 'systemctl --user restart' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'pipewire.service pipewire-pulse.service wireplumber.service' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'desktop_audio_probe' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'desktop_profile=' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'alsa\.id = "yogabook"' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'awk -v card="$desktop_card"' "$root/libexec/yogabook-validator-active.sh"
+if grep -Fq 'alsa_card.platform-cht-yogabook' "$root/libexec/yogabook-validator-active.sh"; then
+	echo 'active audio validation must discover the Yoga Book PipeWire card by ALSA identity' >&2
+	exit 1
+fi
 grep -Fq 'pactl set-card-profile' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq "cget name='Int Mic Switch'" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq "cget name='Sto1 ADC MIXL ADC2 Switch'" "$root/libexec/yogabook-validator-active.sh"
@@ -122,7 +163,7 @@ grep -Fq 'pcm0p/sub0/status' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq "cget name='Speaker Switch'" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'Desktop playback required a second full audio-graph restart' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'pactl parec pw-play wpctl systemctl' "$root/libexec/yogabook-validator-active.sh"
-grep -Eq '^ python3-evdev, python3-gi, pipewire-bin, pulseaudio-utils,' "$root/debian/control"
+grep -Eq '^ python3-evdev, python3-gi, pipewire-bin, procps, pulseaudio-utils,' "$root/debian/control"
 grep -Fq 'chown -- "$report_owner:$(id -gn "$report_owner")" "$YBV_RESULTS_BASE"' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq 'generated_default=true' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq 'ybv_chown_tree_to_user "$YBV_AUTO_REPORT_OWNER" "$YBV_REPORT_DIR"' "$root/libexec/yogabook-validator-common.sh"
@@ -204,7 +245,75 @@ for report_writer in yogabook-validator-inputs.sh yogabook-validator-lights.sh y
 	# shellcheck disable=SC2016
 	grep -Fq 'ybv_finish_report_for_user "$real_user"' "$root/libexec/$report_writer"
 done
-grep -Fq 'command_timeout = 600 if command == "automated" else 300' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'Command output' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'Open detailed report' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'suite roll-ups' "$root/ui/yogabook_validator_ui.py"
+for validation_group in 'Recommended workflows' 'Audio and media' 'Input and device modes' \
+	'Platform and power' 'Connectivity and storage' 'Reliability' 'Physical acceptance'; do
+	grep -Fq "$validation_group" "$root/ui/yogabook_validator_ui.py"
+done
+grep -Fq 'actions.set_header_suffix(category_box)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_box.set_halign(Gtk.Align.END)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'row_action_box.set_size_request(76, 44)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'row_status_slot.set_size_request(24, 24)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'row_action_slot.set_size_request(44, 44)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'row_status_icon.set_halign(Gtk.Align.START)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'button.set_halign(Gtk.Align.START)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_box.set_size_request(76, 44)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_status_slot.set_size_request(24, 24)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_action_slot.set_size_request(44, 44)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_status_icon.set_halign(Gtk.Align.START)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_button.set_halign(Gtk.Align.START)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_button.set_size_request(44, 44)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_button_icon.set_pixel_size(24)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'Gtk.Button.new_from_icon_name("media-playback-start-symbolic")' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'button_tooltip = title' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'category_tooltip = f"Run all checks in {section_title}"' "$root/ui/yogabook_validator_ui.py"
+grep -Fq '"media-playback-stop-symbolic"' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'button.update_property([Gtk.AccessibleProperty.LABEL], [label])' "$root/ui/yogabook_validator_ui.py"
+for validation_category in recommended audio-media input-modes platform-power connectivity-storage reliability; do
+	grep -Fq "$validation_category)" "$root/libexec/yogabook-validator-category.sh"
+	grep -Fq "\"$validation_category\"" "$root/ui/yogabook_validator_ui.py"
+done
+grep -Fq 'run_subtest automated' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'run_subtest resources' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'run_subtest suspend' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq "ybv_emit suite stability SKIP 'A physical cold boot is required" "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'category NAME          Run one compatible validation category as a merged suite' "$root/src/yogabook-validator.sh"
+grep -Fq 'report.html' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'yogabook-validator-report.py' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'report DIRECTORY' "$root/src/yogabook-validator.sh"
+grep -Fq 'self.run_streaming_command(argv, output)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'GLib.idle_add(self.append_console, line)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'subtest_start = re.match(r"^===== Running ([a-z0-9-]+) =====$", clean)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.set_subtest_running(subtest_start.group(1))' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.set_subtest_result(check_id, status)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.set_row_running(self.active_subtests[-1][1])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.set_run_buttons_sensitive(False)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq '"Stop validation"' "$root/ui/yogabook_validator_ui.py"
+grep -Fq '"Stopping validation…"' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.set_row_running(self.current_run_button)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'icon.set_from_icon_name("emblem-ok-symbolic")' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'icon.set_from_icon_name("dialog-error-symbolic")' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'icon.set_from_icon_name("process-stop-symbolic")' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.cancel_file.touch()' "$root/ui/yogabook_validator_ui.py"
+grep -Fq '"camera",' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'cleanup_files=[answers]' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'start_new_session=True' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'CANCELLATION_REQUESTED: stopping the active test and restoring hardware state' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'cancellation file must be inside the report directory' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'ybv_capture_state_snapshot "$YBV_STATE_BEFORE"' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'ybv_verify_state_preservation || true' "$root/libexec/yogabook-validator-common.sh"
+for restoring_runner in active camera lights storage wireless; do
+	grep -Fq 'ybv_register_restore_callback' "$root/libexec/yogabook-validator-$restoring_runner.sh"
+done
+for bounded_bluetooth_command in \
+	'timeout 5 btmgmt --index "$controller_index" info' \
+	'timeout 5 btmgmt --index "$controller_index" stop-find' \
+	'timeout 5 bluetoothctl show'; do
+	grep -Fq "$bounded_bluetooth_command" "$root/libexec/yogabook-validator-wireless.sh"
+done
 grep -Fq 'does not grab devices' "$root/README.md"
 grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'capabilities(absinfo=False)' "$root/libexec/yogabook-validator-modes.sh"
@@ -246,7 +355,7 @@ if grep -Fq 'run_subtest rotation' "$root/libexec/yogabook-validator-automated.s
 	exit 1
 fi
 grep -Fq 'rotation               Verify all four automatic display orientations' "$root/src/yogabook-validator.sh"
-grep -Fq 'command in ("modes", "rotation")' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'if clean.startswith("ACTION_REQUIRED:")' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"
 grep -Fq 'cht_wcove_pwrsrc' "$root/libexec/yogabook-validator-power.sh"
@@ -298,6 +407,13 @@ if grep -Fq 'discovery_output" >>"$YBV_LOG"' "$root/libexec/yogabook-validator-w
 	exit 1
 fi
 grep -Fq 'restore_route || restore_rc=1' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'camera tests require root access to private AtomISP devices' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'systemctl stop "$camera_service"' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'systemctl start --no-block "$camera_service"' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'v4l2-ctl -d "$video_device" --set-input="$port"' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'ybv_finish_report_for_user "$real_user"' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq '[[ $camera_state_restored == true ]] && return 0' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq '[[ $restore_rc -ne 0 ]] || camera_state_restored=true' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq "trap 'restore_camera_state || true' EXIT" "$root/libexec/yogabook-validator-camera.sh"
 # shellcheck disable=SC2016
 grep -Fq 'focus_absolute=$target' "$root/libexec/yogabook-validator-camera.sh"

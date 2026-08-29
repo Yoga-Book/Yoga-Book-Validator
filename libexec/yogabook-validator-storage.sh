@@ -47,6 +47,7 @@ cleanup_mount() {
 	fi
 	return "$cleanup_rc"
 }
+ybv_register_restore_callback cleanup_mount
 trap 'cleanup_mount || true' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

@@ -11,7 +11,15 @@ action=${1:-}
 [[ -n $action ]] || { echo 'ERROR: missing active test name' >&2; exit 2; }
 shift
 
+category_name=
+if [[ $action == category ]]; then
+	category_name=${1:-}
+	[[ -n $category_name ]] || { echo 'ERROR: category requires a name' >&2; exit 2; }
+	shift
+fi
+
 output_dir=
+cancel_file=
 assume_yes=false
 include_suspend=false
 suspend_seconds=8
@@ -21,6 +29,9 @@ while (($#)); do
 	--output)
 		[[ $# -ge 2 ]] || { echo 'ERROR: --output requires a directory' >&2; exit 2; }
 		output_dir=$2; shift 2 ;;
+	--cancel-file)
+		[[ $# -ge 2 ]] || { echo 'ERROR: --cancel-file requires a path' >&2; exit 2; }
+		cancel_file=$2; shift 2 ;;
 	--yes) assume_yes=true; shift ;;
 	--include-suspend)
 		[[ $action == automated ]] || { echo 'ERROR: --include-suspend is valid only for automated' >&2; exit 2; }
@@ -50,6 +61,24 @@ automated)
 	else
 		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, wireless, storage and audible audio; suspend remains opt-in.'
 	fi ;;
+category)
+	case $category_name in
+	recommended)
+		prompt='This category runs the optimized union of the automated, full-passive, and quick-audit workflows without repeating their overlapping checks.' ;;
+	audio-media)
+		prompt='This category runs display inspection, both camera captures, reversible light checks, and the audible audio test in a safe sequence.' ;;
+	input-modes)
+		prompt='This interactive category inspects input capabilities, pulses both haptics, then guides you through keyboard, pen, and all four display orientations.' ;;
+	platform-power)
+		prompt='This category runs the read-only platform, resource, power, thermal, and sensor checks as one report.' ;;
+	connectivity-storage)
+		prompt='This category tests USB and wireless, reads the SD card, then performs the bounded 64 KiB write, verify, synchronize, and delete check.' ;;
+	reliability)
+		prompt='This category runs the suspend/resume test, then starts, advances, or confirms completion of cold-boot tracking according to its persistent state.' ;;
+	*) echo "ERROR: unsupported category: $category_name" >&2; exit 2 ;;
+	esac ;;
+camera)
+	prompt='This test pauses the desktop camera processor, captures three private AtomISP frames from each sensor, checks rear focus, then restores the original route and processor state.' ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
 inputs)
@@ -81,7 +110,7 @@ fi
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 if [[ $action == haptics || $action == inputs || $action == modes || $action == rotation ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
-elif [[ $action == automated || $action == lights || $action == storage || $action == storage-write || $action == wireless ]]; then
+elif [[ $action == automated || $action == camera || $action == category || $action == lights || $action == storage || $action == storage-write || $action == wireless ]]; then
 	:
 else
 	for required in alsactl alsaucm aplay arecord pactl parec pw-play wpctl systemctl timeout python3; do
@@ -112,10 +141,56 @@ if [[ -n $real_user ]]; then
 	fi
 fi
 
+if [[ -n $cancel_file ]]; then
+	canonical_cancel=$(realpath -m -- "$cancel_file")
+	case $canonical_cancel in
+	"${output_dir%/}"/*) ;;
+	*) echo 'ERROR: cancellation file must be inside the report directory' >&2; exit 2 ;;
+	esac
+	cancel_file=$canonical_cancel
+	owner_pid=$$
+	owner_pgid=$(ps -o pgid= -p "$owner_pid" | tr -d '[:space:]')
+	[[ $owner_pgid == "$owner_pid" ]] || {
+		echo 'ERROR: cancellable active tests require a dedicated process group' >&2
+		exit 2
+	}
+	# The cancellation supervisor expands its positional parameters, not the
+	# active test's variables in this parent shell.
+	# shellcheck disable=SC2016
+	setsid bash -c '
+		owner_pid=$1
+		owner_pgid=$2
+		cancel_file=$3
+		while owner_state=$(ps -o stat= -p "$owner_pid" 2>/dev/null) && [[ -n $owner_state && $owner_state != Z* ]]; do
+			if [[ -e $cancel_file ]]; then
+				printf "CANCELLATION_REQUESTED: stopping the active test and restoring hardware state\n"
+				rm -f -- "$cancel_file"
+				kill -TERM -- "-$owner_pgid" 2>/dev/null || true
+				for _ in {1..150}; do
+					owner_state=$(ps -o stat= -p "$owner_pid" 2>/dev/null || true)
+					[[ -n $owner_state && $owner_state != Z* ]] || exit 0
+					sleep 0.2
+				done
+				kill -KILL -- "-$owner_pgid" 2>/dev/null || true
+				exit 0
+			fi
+			sleep 0.2
+		done
+	' _ "$owner_pid" "$owner_pgid" "$cancel_file" &
+fi
+
 if [[ $action == automated ]]; then
 	automated_args=(--output "$output_dir")
 	[[ $include_suspend == true ]] && automated_args+=(--include-suspend)
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-automated.sh" "${automated_args[@]}"
+fi
+
+if [[ $action == category ]]; then
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-category.sh" "$category_name" --output "$output_dir"
+fi
+
+if [[ $action == camera ]]; then
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-camera.sh" --yes --output "$output_dir"
 fi
 
 if [[ $action == inputs || $action == lights || $action == modes || $action == rotation || $action == storage || $action == storage-write || $action == wireless ]]; then
@@ -222,6 +297,7 @@ playback_pid=
 capture_pid=
 desktop_ready_seconds=
 desktop_recovery_used=false
+desktop_card=
 desktop_profile=
 playback_log="$YBV_REPORT_DIR/suspend-playback.log"
 capture_log="$YBV_REPORT_DIR/suspend-capture.log"
@@ -315,7 +391,7 @@ restore_state() {
 				profile_ready=false
 				for _ in {1..30}; do
 					if ybv_run_as_user "$real_user" timeout 2 pactl list cards short 2>/dev/null |
-						awk '$2 == "alsa_card.platform-cht-yogabook" { found=1 } END { exit !found }'; then
+						awk -v card="$desktop_card" '$2 == card { found=1 } END { exit !found }'; then
 						profile_ready=true
 						break
 					fi
@@ -325,9 +401,9 @@ restore_state() {
 					# Replay the UCM device enable sequences after restoring the raw
 					# mixer snapshot, even when WirePlumber retained the same profile.
 					ybv_run_as_user "$real_user" pactl set-card-profile \
-						alsa_card.platform-cht-yogabook off >/dev/null 2>&1 || desktop_rc=1
+						"$desktop_card" off >/dev/null 2>&1 || desktop_rc=1
 					ybv_run_as_user "$real_user" pactl set-card-profile \
-						alsa_card.platform-cht-yogabook "$desktop_profile" >/dev/null 2>&1 || desktop_rc=1
+						"$desktop_card" "$desktop_profile" >/dev/null 2>&1 || desktop_rc=1
 				else
 					desktop_rc=1
 				fi
@@ -359,6 +435,7 @@ restore_state() {
 	fi
 	return "$restore_rc"
 }
+ybv_register_restore_callback restore_state
 trap 'restore_state || true' EXIT INT TERM
 
 # Save before stopping WirePlumber: closing its UCM session temporarily disables
@@ -373,22 +450,25 @@ else
 fi
 
 if [[ -n $real_user ]]; then
-	desktop_profile=$(ybv_run_as_user "$real_user" timeout 3 pactl list cards 2>/dev/null |
-		awk '
-			/^[[:space:]]*Name: alsa_card\.platform-cht-yogabook$/ { in_card=1; next }
-			/^[[:space:]]*Name:/ { in_card=0 }
-			in_card && /^[[:space:]]*Active Profile:/ {
+	desktop_cards=$(ybv_run_as_user "$real_user" timeout 3 pactl list cards 2>/dev/null || true)
+	desktop_card=$(awk '
+		/^[[:space:]]*Name:/ { card=$2 }
+		/^[[:space:]]*alsa\.id = "yogabook"$/ { print card; exit }
+	' <<<"$desktop_cards")
+	desktop_profile=$(awk -v target="$desktop_card" '
+		/^[[:space:]]*Name:/ { in_card=($2 == target); next }
+		in_card && /^[[:space:]]*Active Profile:/ {
 				sub(/^[[:space:]]*Active Profile:[[:space:]]*/, "")
 				print
 				exit
 			}
-		' || true)
-	if [[ -z $desktop_profile ]]; then
+	' <<<"$desktop_cards")
+	if [[ -z $desktop_card || -z $desktop_profile ]]; then
 		ybv_emit audio desktop-profile FAIL 'Could not save the active Yoga Book desktop audio profile'
 		ybv_finish_report
 		exit 1
 	fi
-	ybv_emit audio desktop-profile PASS 'Saved the active Yoga Book desktop audio profile' "$desktop_profile"
+	ybv_emit audio desktop-profile PASS 'Saved the active Yoga Book desktop audio profile' "$desktop_card profile=$desktop_profile"
 fi
 
 if [[ -n $real_user ]]; then

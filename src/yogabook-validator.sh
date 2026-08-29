@@ -18,6 +18,7 @@ Commands:
   automated              Run all non-suspend automated validation
   check                  Run the passive full-stack audit
   passive                Run every read-only validation as one merged suite
+  category NAME          Run one compatible validation category as a merged suite
   audio                  Run state-safe audio transport and signal tests
   camera                 Stream three frames from both cameras and restore route
   display                Inspect i915, DSI, Mutter and desktop display policy
@@ -39,6 +40,7 @@ Commands:
   gnss [OPTIONS]         Inspect GNSS; optionally require sky or a fix
   physical               Record guided physical acceptance
   full                   Run full passive suite, then physical acceptance
+  report DIRECTORY       Rebuild JSON, Markdown and HTML diagnostics
   bundle DIRECTORY       Create a compressed support bundle
   ui                     Open the graphical validator
   version                Print the installed version
@@ -52,10 +54,14 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | camera | display | gnss | passive | physical | full | bundle | platform | power | resources | sensors | stability | usb)
+check | display | gnss | passive | physical | full | bundle | platform | power | resources | sensors | stability | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
-audio | automated | haptics | inputs | lights | modes | rotation | storage | storage-write | suspend | wireless)
+report)
+	[[ $# -eq 1 ]] || { echo 'Usage: yogabook-validator report DIRECTORY' >&2; exit 2; }
+	exec python3 "$LIBEXEC_DIR/yogabook-validator-report.py" --print-summary "$1"
+	;;
+audio | automated | camera | category | haptics | inputs | lights | modes | rotation | storage | storage-write | suspend | wireless)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then
