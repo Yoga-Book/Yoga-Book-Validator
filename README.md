@@ -48,7 +48,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.26.7_all.deb
+sudo apt install ../yogabook-validator_0.26.8_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:

@@ -148,6 +148,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.run_buttons: list[Gtk.Button] = []
         self.row_spinners: dict[Gtk.Button, Gtk.Spinner] = {}
         self.row_status_icons: dict[Gtk.Button, Gtk.Image] = {}
+        self.run_button_icons: dict[Gtk.Button, Gtk.Image] = {}
         self.run_button_tooltips: dict[Gtk.Button, str] = {}
         self.subtest_buttons: dict[str, Gtk.Button] = {}
         category_actions = {
@@ -259,7 +260,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             page.add(actions)
             for title, subtitle, callback, suggested in section_rows:
                 row = Adw.ActionRow(title=title, subtitle=subtitle)
-                button = Gtk.Button.new_from_icon_name("media-playback-start-symbolic")
+                button = self.create_action_button("media-playback-start-symbolic", 18)
                 button.add_css_class("flat")
                 button_tooltip = title
                 self.set_action_button_state(
@@ -321,14 +322,11 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 category_status_icon.set_visible(False)
                 category_status_icon.set_halign(Gtk.Align.START)
                 category_status_icon.set_valign(Gtk.Align.CENTER)
-                category_button = Gtk.Button.new_from_icon_name("media-playback-start-symbolic")
+                category_button = self.create_action_button("media-playback-start-symbolic", 24)
                 category_button.add_css_class("flat")
                 category_button.set_size_request(44, 44)
                 category_button.set_halign(Gtk.Align.START)
                 category_button.set_valign(Gtk.Align.CENTER)
-                category_button_icon = category_button.get_child()
-                if isinstance(category_button_icon, Gtk.Image):
-                    category_button_icon.set_pixel_size(24)
                 category_tooltip = f"Run all checks in {section_title}"
                 category_button.set_tooltip_text(category_tooltip)
                 category_button.update_property(
@@ -705,8 +703,22 @@ class ValidatorWindow(Adw.ApplicationWindow):
         if was_active and self.active_subtests:
             self.set_row_running(self.active_subtests[-1][1])
 
+    def create_action_button(self, icon_name: str, icon_size: int) -> Gtk.Button:
+        icon = Gtk.Image.new_from_icon_name(icon_name)
+        icon.set_pixel_size(icon_size)
+        icon.set_halign(Gtk.Align.START)
+        icon.set_valign(Gtk.Align.CENTER)
+        content = Gtk.Box()
+        content.set_hexpand(True)
+        content.set_halign(Gtk.Align.FILL)
+        content.append(icon)
+        button = Gtk.Button()
+        button.set_child(content)
+        self.run_button_icons[button] = icon
+        return button
+
     def set_action_button_state(self, button: Gtk.Button, icon_name: str, label: str) -> None:
-        button.set_icon_name(icon_name)
+        self.run_button_icons[button].set_from_icon_name(icon_name)
         button.set_tooltip_text(label)
         button.update_property([Gtk.AccessibleProperty.LABEL], [label])
 

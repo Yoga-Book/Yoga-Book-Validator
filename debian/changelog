@@ -1,3 +1,10 @@
+yogabook-validator (0.26.8) unstable; urgency=medium
+
+  * Left-align the Play and Stop glyphs inside their controls so category and
+    row actions share the same visual origin despite their different sizes.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 01:35:00 +0200
+
 yogabook-validator (0.26.7) unstable; urgency=medium
 
   * Keep status indicators and run controls in fixed-width columns, aligned by

@@ -16,6 +16,7 @@
   <provides><binary>yogabook-validator-ui</binary></provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.26.8" date="2026-08-30"/>
     <release version="0.26.7" date="2026-08-30"/>
     <release version="0.26.6" date="2026-08-30"/>
     <release version="0.26.5" date="2026-08-30"/>
