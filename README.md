@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.33.0_all.deb
+sudo apt install ../yogabook-validator_0.34.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -71,6 +71,7 @@ yogabook-validator category reliability
 yogabook-validator audio
 yogabook-validator camera
 yogabook-validator display
+yogabook-validator dossier REPORT_DIRECTORY... --output DOSSIER_DIRECTORY
 yogabook-validator haptics
 yogabook-validator headset
 yogabook-validator inputs
@@ -243,6 +244,16 @@ subset: passive diagnostics, cameras, input capability inspection, read-only SD
 validation, Wi-Fi/Bluetooth, reversible lights and service final-state checks.
 It excludes every playback, capture, headset, haptic, suspend and guided action
 by construction while retaining cancellation and per-subtest restoration.
+
+`dossier` combines explicitly selected reports from the same Validator release
+into one acceptance matrix. Before using any evidence it verifies the report
+schema, Validator version, acceptance-matrix digest, device/OS/architecture and
+the SHA-256 metadata for every required source artifact. `sources.tsv` records
+the source label, command, boot, timestamps and content digests without leaking
+absolute filesystem paths. Duplicate observations remain visible and the most
+severe result wins, so composing reports can never turn an older failure into a
+pass. Reports from another release or device, and modified artifacts, are
+rejected instead of silently mixed.
 
 The LTE test never enables, connects or disconnects the modem. Without a SIM it
 records explicit conditional skips. With a SIM it requires an already

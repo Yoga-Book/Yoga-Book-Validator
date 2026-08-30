@@ -1,3 +1,14 @@
+yogabook-validator (0.34.0) unstable; urgency=medium
+
+  * Add an integrity-checked acceptance dossier that composes explicitly
+    selected reports into one complete component matrix with source provenance.
+  * Reject mixed Validator versions, acceptance matrices, device identities and
+    tampered required artifacts instead of silently promoting stale evidence.
+  * Expose dossier composition in the UI and describe passive plus physical
+    acceptance accurately rather than presenting it as complete coverage.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 06:20:00 +0200
+
 yogabook-validator (0.33.0) unstable; urgency=medium
 
   * Add cancellable quiet diagnostics covering every automated camera, input,

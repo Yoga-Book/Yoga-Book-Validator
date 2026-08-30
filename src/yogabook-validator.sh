@@ -32,6 +32,7 @@ Commands:
   platform               Inspect SoC, CPU, thermal, eMMC and RTC health
   power                  Validate battery, charger and desktop telemetry
   quiet                  Run all non-audible, non-haptic automated diagnostics
+  dossier REPORT...      Compose compatible reports into an acceptance dossier
   resources              Profile Yoga Book services and thermal safeguards
   sensors                Sample every Yoga Book IIO sensor channel
   stability ACTION       Track operator-confirmed cold-boot validation
@@ -57,7 +58,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | display | gnss | modem | passive | physical | full | bundle | platform | power | resources | sensors | stability | usb)
+check | display | dossier | gnss | modem | passive | physical | full | bundle | platform | power | resources | sensors | stability | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 report)

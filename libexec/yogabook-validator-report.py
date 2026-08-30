@@ -51,7 +51,7 @@ CHECK_GUIDANCE = {
         "Check the running kernel, bound AtomISP/sensor drivers, media graph, and current-boot camera errors before changing userspace."
     ),
     ("wireless", "bluetooth-features"): (
-        "Capture bounded btmgmt info and bluetoothd status; distinguish an unavailable controller from a genuinely missing capability."
+        "Capture bounded bluetoothctl capability properties and bluetoothd status; distinguish an unavailable controller from a genuinely missing capability."
     ),
     ("wireless", "bluetooth-scan"): (
         "Inspect rfkill, bluetooth.service and btmgmt discovery output while preserving the original radio state."
@@ -445,6 +445,7 @@ def build_model(directory: Path) -> dict[str, Any]:
                 "state-before.tsv",
                 "state-after.tsv",
                 "state-diff.txt",
+                "sources.tsv",
             )
             if (path := directory / name).is_file()
         ],

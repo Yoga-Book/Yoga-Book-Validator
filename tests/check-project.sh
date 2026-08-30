@@ -15,6 +15,7 @@ required=(
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
 	libexec/yogabook-validator-category.sh
+	libexec/yogabook-validator-dossier.py libexec/yogabook-validator-dossier.sh
 	libexec/yogabook-validator-report.py
 	libexec/yogabook-validator-active.sh libexec/yogabook-validator-automated.sh
 	libexec/yogabook-validator-camera.sh
@@ -74,6 +75,7 @@ if command -v shellcheck >/dev/null; then
 fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py" "$root"/libexec/*.py
 python3 "$root/tests/test-report.py"
+python3 "$root/tests/test-dossier.py"
 python3 "$root/tests/test-hdmi-link.py"
 python3 "$root/tests/test-headset-events.py"
 python3 "$root/tests/test-modem.py"
@@ -279,6 +281,8 @@ grep -Fq 'self.run_command("resources", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("modem", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("headset", ["--yes", "--timeout", "90"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("quiet", ["--yes"])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.run_command("dossier", [str(source) for source in sources])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'chooser.set_select_multiple(True)' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
@@ -382,6 +386,8 @@ grep -Fq 'category NAME          Run one compatible validation category as a mer
 grep -Fq 'report.html' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-report.py' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq 'report DIRECTORY' "$root/src/yogabook-validator.sh"
+grep -Fq 'dossier REPORT...      Compose compatible reports into an acceptance dossier' "$root/src/yogabook-validator.sh"
+grep -Fq 'check | display | dossier | gnss' "$root/src/yogabook-validator.sh"
 grep -Fq 'quiet                  Run all non-audible, non-haptic automated diagnostics' "$root/src/yogabook-validator.sh"
 grep -Fq 'self.run_streaming_command(argv, output)' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'GLib.idle_add(self.append_console, line)' "$root/ui/yogabook_validator_ui.py"
@@ -405,6 +411,10 @@ grep -Fq 'start_new_session=True' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'CANCELLATION_REQUESTED: stopping the active test and restoring hardware state' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'cancellation file must be inside the report directory' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'ybv_capture_state_snapshot "$YBV_STATE_BEFORE"' "$root/libexec/yogabook-validator-common.sh"
+snapshot_service_line=$(grep -n -F 'for unit in halo-keyboard.service yogabook-camera.service' "$root/libexec/yogabook-validator-common.sh" | cut -d: -f1)
+snapshot_mount_line=$(grep -n -F "printf 'temporary:validator-mounts" "$root/libexec/yogabook-validator-common.sh" | cut -d: -f1)
+[[ -n $snapshot_service_line && -n $snapshot_mount_line ]]
+((snapshot_service_line > snapshot_mount_line))
 grep -Fq 'ybv_verify_state_preservation || true' "$root/libexec/yogabook-validator-common.sh"
 for restoring_runner in active camera lights storage wireless; do
 	grep -Fq 'ybv_register_restore_callback' "$root/libexec/yogabook-validator-$restoring_runner.sh"

@@ -101,6 +101,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.cancel_file: Path | None = None
         self.cancel_requested = False
         self.current_cleanup_files: list[Path] = []
+        self.dossier_chooser: Gtk.FileChooserNative | None = None
         self.active_subtests: list[tuple[str, Gtk.Button]] = []
         self.live_counts = {status: 0 for status in ("PASS", "FAIL", "WARN", "SKIP", "INFO")}
 
@@ -199,9 +200,10 @@ class ValidatorWindow(Adw.ApplicationWindow):
         validation_sections = [
             (
                 "Recommended workflows",
-                "Start here for a complete or non-invasive health assessment.",
+                "Build a complete evidence dossier or run a new health assessment.",
                 [
-                    ("Complete device acceptance", "Combine deep passive diagnostics and physical observations in one report", self.on_full, True),
+                    ("Build acceptance dossier", "Combine selected same-version reports with integrity and provenance checks", self.on_dossier, True),
+                    ("Run passive + physical acceptance", "Combine deep passive diagnostics and guided physical observations", self.on_full, False),
                     ("Run automated suite", "All non-guided transport checks except suspend, with one authorization", self.on_automated, False),
                     ("Run quiet diagnostics", "All automated checks that do not play, record, vibrate, suspend, or require guidance", self.on_quiet, False),
                     ("Run full passive suite", "All deep read-only checks in one merged report", self.on_passive, False),
@@ -949,6 +951,38 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_full(self, _button) -> None:
         PhysicalWindow(self, command="full").present()
 
+    def on_dossier(self, _button) -> None:
+        chooser = Gtk.FileChooserNative.new(
+            "Select validation report folders",
+            self,
+            Gtk.FileChooserAction.SELECT_FOLDER,
+            "Build dossier",
+            "Cancel",
+        )
+        chooser.set_select_multiple(True)
+        chooser.set_current_folder(Gio.File.new_for_path(str(results_root())))
+        chooser.connect("response", self.on_dossier_response)
+        self.dossier_chooser = chooser
+        chooser.show()
+
+    def on_dossier_response(self, chooser: Gtk.FileChooserNative, response: int) -> None:
+        if response == Gtk.ResponseType.ACCEPT:
+            files = chooser.get_files()
+            sources = [
+                Path(item.get_path())
+                for index in range(files.get_n_items())
+                if (item := files.get_item(index)) is not None and item.get_path() is not None
+            ]
+            if sources:
+                self.run_command("dossier", [str(source) for source in sources])
+            else:
+                self.pending_run_button = None
+                self.show_error("No reports selected", "Select at least one Validator report folder.")
+        else:
+            self.pending_run_button = None
+        chooser.hide()
+        self.dossier_chooser = None
+
     def show_error(self, heading: str, body: str) -> None:
         dialog = Adw.MessageDialog.new(self, heading, body)
         dialog.add_response("close", "Close")
@@ -957,7 +991,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
 class PhysicalWindow(Adw.Window):
     def __init__(self, parent: ValidatorWindow, command: str = "physical") -> None:
-        title = "Complete device acceptance" if command == "full" else "Physical acceptance"
+        title = "Passive + physical acceptance" if command == "full" else "Physical acceptance"
         super().__init__(transient_for=parent, modal=True, title=title)
         self.parent_window = parent
         self.command = command

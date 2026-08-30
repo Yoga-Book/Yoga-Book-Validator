@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.33.0
+YBV_VERSION=0.34.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -133,13 +133,6 @@ ybv_capture_state_snapshot() {
 		ybv_snapshot_sysfs_values "$sysroot/sys/class/rfkill" type name soft hard
 
 		if [[ $YBV_SYSROOT == / ]]; then
-			for unit in halo-keyboard.service yogabook-camera.service yogabook-gnss.service \
-				iio-sensor-proxy.service bluetooth.service ModemManager.service; do
-				state=$(systemctl show "$unit" --property=ActiveState,SubState --value 2>/dev/null | tr '\n' '/' || true)
-				restarts=$(systemctl show "$unit" --property=NRestarts --value 2>/dev/null || true)
-				printf 'system-service:%s\tstate=%s restarts=%s\n' "$unit" "${state%/}" "${restarts:-unknown}"
-			done
-
 			real_user=$(ybv_real_user)
 			if [[ -n $real_user && $real_user != root ]] && id "$real_user" >/dev/null 2>&1; then
 				user_uid=$(id -u "$real_user")
@@ -200,6 +193,16 @@ ybv_capture_state_snapshot() {
 				done < <(findmnt -rn -o SOURCE,FSTYPE,OPTIONS 2>/dev/null)
 			fi
 			printf 'temporary:validator-mounts\t%s\n' "$(find /run -maxdepth 1 -type d -name 'yogabook-validator-*' -printf '%f\n' 2>/dev/null | sort | tr '\n' ',' || true)"
+
+			# Sample services after the slower desktop, audio and Bluetooth calls.
+			# This keeps asynchronous service transitions from being backdated into
+			# an otherwise later snapshot.
+			for unit in halo-keyboard.service yogabook-camera.service yogabook-gnss.service \
+				iio-sensor-proxy.service bluetooth.service ModemManager.service; do
+				state=$(systemctl show "$unit" --property=ActiveState,SubState --value 2>/dev/null | tr '\n' '/' || true)
+				restarts=$(systemctl show "$unit" --property=NRestarts --value 2>/dev/null || true)
+				printf 'system-service:%s\tstate=%s restarts=%s\n' "$unit" "${state%/}" "${restarts:-unknown}"
+			done
 		fi
 	} | LC_ALL=C sort >"$temporary"
 	mv -f -- "$temporary" "$output"
