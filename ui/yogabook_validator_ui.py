@@ -81,6 +81,66 @@ PHYSICAL_CHECKS = [
     ("poweroff", "A full shutdown powers the tablet off cleanly"),
 ]
 
+PHYSICAL_GROUPS = [
+    (
+        "Audio and headset",
+        "Confirm audible quality, microphone intelligibility and wired-headset controls.",
+        [
+            "speakers",
+            "headphones",
+            "internal-microphone",
+            "headset-microphone",
+            "jack-detection",
+            "headset-buttons",
+        ],
+    ),
+    (
+        "Input, Halo and pen",
+        "Confirm tactile input, mode-dependent devices and visible Halo behavior.",
+        [
+            "halo-keys",
+            "halo-touchpad",
+            "halo-haptics",
+            "halo-backlight",
+            "pen-direction",
+            "pen-pressure",
+            "display-touch",
+            "hardware-buttons",
+            "lid-switch",
+        ],
+    ),
+    (
+        "Display, cameras and indicators",
+        "Confirm image quality, orientation, brightness and externally visible indicators.",
+        [
+            "display-stability",
+            "auto-rotation",
+            "display-brightness",
+            "micro-hdmi",
+            "front-camera",
+            "rear-camera",
+            "indicator-leds",
+        ],
+    ),
+    (
+        "Connectivity and storage",
+        "Confirm real accessories, radio links, removable media and outdoor positioning.",
+        ["wifi", "bluetooth", "usb-otg", "sd-card", "lte-data", "gnss"],
+    ),
+    (
+        "Power and reliability",
+        "Confirm behavior that must remain correct across charging, sleep and power cycles.",
+        [
+            "suspend-resume",
+            "charging",
+            "thermal-stability",
+            "cold-boots",
+            "reboot",
+            "poweroff",
+        ],
+    ),
+]
+
 
 def results_root() -> Path:
     documents = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS)
@@ -1020,18 +1080,20 @@ class PhysicalWindow(Adw.Window):
         if command == "full":
             description = "Record the observations to include after deep passive diagnostics. " + description
         page.set_description(description)
-        group = Adw.PreferencesGroup(title="Observed hardware behavior")
-        page.add(group)
-        for check_id, label in PHYSICAL_CHECKS:
-            row = Adw.ActionRow(title=label)
-            dropdown = Gtk.DropDown.new_from_strings(["Skip", "Pass", "Fail"])
-            dropdown.set_selected(0)
-            note = Gtk.Entry(placeholder_text="Optional note")
-            note.set_width_chars(18)
-            row.add_suffix(dropdown)
-            row.add_suffix(note)
-            group.add(row)
-            self.rows.append((check_id, dropdown, note))
+        labels = dict(PHYSICAL_CHECKS)
+        for group_title, group_description, check_ids in PHYSICAL_GROUPS:
+            group = Adw.PreferencesGroup(title=group_title, description=group_description)
+            page.add(group)
+            for check_id in check_ids:
+                row = Adw.ActionRow(title=labels[check_id])
+                dropdown = Gtk.DropDown.new_from_strings(["Skip", "Pass", "Fail"])
+                dropdown.set_selected(0)
+                note = Gtk.Entry(placeholder_text="Optional note")
+                note.set_width_chars(18)
+                row.add_suffix(dropdown)
+                row.add_suffix(note)
+                group.add(row)
+                self.rows.append((check_id, dropdown, note))
         toolbar.set_content(page)
         self.set_content(toolbar)
 

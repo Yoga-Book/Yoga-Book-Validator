@@ -119,6 +119,14 @@ assignment = next(
     and any(isinstance(target, ast.Name) and target.id == "PHYSICAL_CHECKS" for target in node.targets)
 )
 physical_ids = {item[0] for item in ast.literal_eval(assignment.value)}
+group_assignment = next(
+    node for node in module.body
+    if isinstance(node, ast.Assign)
+    and any(isinstance(target, ast.Name) and target.id == "PHYSICAL_GROUPS" for target in node.targets)
+)
+group_ids = [check_id for _title, _description, ids in ast.literal_eval(group_assignment.value) for check_id in ids]
+assert len(group_ids) == len(set(group_ids)), "physical groups contain duplicate checks"
+assert set(group_ids) == physical_ids, (physical_ids - set(group_ids), set(group_ids) - physical_ids)
 required_physical = {
     selector.removeprefix("physical/")
     for component in matrix["components"]
@@ -670,6 +678,7 @@ with open(sys.argv[2], newline="", encoding="utf-8") as stream:
     shell_ids = [row["check_id"] for row in csv.DictReader(stream, delimiter="\t")]
 assert ui_ids == shell_ids, (ui_ids, shell_ids)
 PY
+grep -Fq 'for group_title, group_description, check_ids in PHYSICAL_GROUPS:' "$root/ui/yogabook_validator_ui.py"
 
 fake_passive="$temporary/fake-passive"
 fake_physical="$temporary/fake-physical"
