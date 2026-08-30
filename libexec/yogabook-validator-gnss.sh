@@ -31,6 +31,19 @@ else
 	ybv_emit gnss device WARN 'No dedicated GNSS device node is present'
 fi
 
+gnss_runtime=/var/lib/yogabook-gnss/root/system/vendor/bin/gpsd
+if [[ ! -x $gnss_runtime ]]; then
+	ybv_emit gnss runtime-assets FAIL 'The private BCM4752 transport runtime has not been imported' \
+		'Build it from a legally obtained Lenovo Android 7.1.1 system image with yogabook-gnss-build-runtime, then run sudo yogabook-gnss-import ARCHIVE'
+	ybv_emit gnss transport SKIP 'GNSS transport cannot start until its private runtime is imported'
+	ybv_emit gnss sky SKIP 'Satellite reception cannot be sampled until GNSS transport is available'
+	ybv_emit gnss fix SKIP 'A position fix cannot be sampled until GNSS transport is available'
+	ybv_emit gnss service-stability SKIP 'GNSS service stability cannot be measured before runtime import'
+	ybv_finish_report
+	exit
+fi
+ybv_emit gnss runtime-assets PASS 'The verified private BCM4752 transport runtime is installed' "$gnss_runtime"
+
 if ybv_has_command yogabook-gnss-health; then
 	health_args=()
 	[[ $requirement == sky ]] && health_args+=(--require-sky)

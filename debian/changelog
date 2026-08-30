@@ -1,3 +1,16 @@
+yogabook-validator (0.27.0) unstable; urgency=medium
+
+  * Add an authoritative component coverage matrix and keep conditional skips
+    visible as incomplete acceptance rather than implicit success.
+  * Exclude service-driven Halo idle brightness from generic state comparison
+    while retaining explicit exercise and restoration in the lights test.
+  * Distinguish intermittent atomic display misses from critical or repeated
+    GPU failures while preserving the complete matching journal evidence.
+  * Diagnose a missing private GNSS transport runtime with actionable import
+    guidance before attempting service or satellite validation.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 01:50:00 +0200
+
 yogabook-validator (0.26.8) unstable; urgency=medium
 
   * Left-align the Play and Stop glyphs inside their controls so category and

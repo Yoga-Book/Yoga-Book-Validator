@@ -292,10 +292,18 @@ else
 fi
 
 if [[ $YBV_SYSROOT == / ]] && ybv_has_command systemctl; then
+	gnss_runtime=/var/lib/yogabook-gnss/root/system/vendor/bin/gpsd
+	if [[ -x $gnss_runtime ]]; then
+		ybv_emit gnss runtime-assets PASS 'The verified private BCM4752 transport runtime is installed' "$gnss_runtime"
+	else
+		ybv_emit gnss runtime-assets FAIL 'The private BCM4752 transport runtime has not been imported' \
+			'Build it from a legally obtained Lenovo Android 7.1.1 system image with yogabook-gnss-build-runtime, then run sudo yogabook-gnss-import ARCHIVE'
+	fi
 	if systemctl is-active --quiet yogabook-gnss.service && systemctl is-active --quiet gpsd.socket; then
 		ybv_emit gnss services PASS 'Yoga Book GNSS transport and gpsd socket are active'
 	else
-		ybv_emit gnss services FAIL 'Yoga Book GNSS transport or gpsd socket is not active'
+		ybv_emit gnss services FAIL 'Yoga Book GNSS transport or gpsd socket is not active' \
+			"transport=$(systemctl is-active yogabook-gnss.service 2>/dev/null || true) gpsd-socket=$(systemctl is-active gpsd.socket 2>/dev/null || true)"
 	fi
 	gnss_pipe=/var/lib/yogabook-gnss/root/data/gps/nmeapipe
 	if [[ -p $gnss_pipe ]]; then
@@ -304,6 +312,7 @@ if [[ $YBV_SYSROOT == / ]] && ybv_has_command systemctl; then
 		ybv_emit gnss nmea-pipe FAIL 'GNSS NMEA transport pipe is missing' "$gnss_pipe"
 	fi
 else
+	ybv_emit gnss runtime-assets SKIP 'Live GNSS runtime inspection is unavailable'
 	ybv_emit gnss services SKIP 'Live GNSS service inspection is unavailable'
 	ybv_emit gnss nmea-pipe SKIP 'Live GNSS transport inspection is unavailable'
 fi

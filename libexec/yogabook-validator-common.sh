@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.26.8
+YBV_VERSION=0.27.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -111,8 +111,10 @@ ybv_snapshot_led_state() {
 		current=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' <<<"$triggers")
 		printf 'sysfs:%s:trigger\t%s\n' "$name" "$(ybv_sanitize "$current")"
 		# Trigger-driven brightness may change asynchronously and is not mutable
-		# policy. Compare brightness only when userspace owns a steady value.
-		if [[ $current == none && -r $directory/brightness ]]; then
+		# policy. Halo keyboard brightness is likewise owned by halo-keyboard's
+		# idle/mode state even while its kernel trigger reads "none". The active
+		# lights test snapshots and verifies that control explicitly.
+		if [[ $current == none && $name != 'ybwmi::kbd_backlight' && -r $directory/brightness ]]; then
 			brightness=$(tr '\n\t' '  ' <"$directory/brightness" 2>/dev/null || true)
 			printf 'sysfs:%s:brightness\t%s\n' "$name" "$(ybv_sanitize "$brightness")"
 		fi

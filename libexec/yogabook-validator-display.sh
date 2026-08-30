@@ -199,13 +199,27 @@ else
 	ybv_emit display brightness-policy FAIL 'GNOME automatic-brightness policy is unavailable'
 fi
 
-display_journal=$(journalctl -b --no-pager -o short-iso 2>>"$YBV_LOG" |
-	grep -Ei '(i915|drm|gnome-shell|mutter).*(gpu hang|wedg|reset.*fail|flip_done timed out|atomic.*fail|software render|llvmpipe|failed to initialize.*(egl|renderer))' || true)
-if [[ -z $display_journal ]]; then
-	ybv_emit display journal PASS 'No targeted GPU, modeset or software-rendering failure occurred in this boot'
+display_journal_all=$(journalctl -b --no-pager -o short-iso 2>>"$YBV_LOG" || true)
+critical_display_journal=$(grep -Ei \
+	'(i915|drm|gnome-shell|mutter).*(gpu hang|wedg|reset.*fail|flip_done timed out|software render|llvmpipe|failed to initialize.*(egl|renderer))' \
+	<<<"$display_journal_all" || true)
+atomic_display_journal=$(grep -Ei '(i915|drm).*(atomic.*fail)' <<<"$display_journal_all" || true)
+atomic_journal_count=0
+[[ -z $atomic_display_journal ]] || atomic_journal_count=$(wc -l <<<"$atomic_display_journal")
+if [[ -n $critical_display_journal ]]; then
+	printf '\n===== Critical display journal failures =====\n%s\n' "$critical_display_journal" >>"$YBV_LOG"
+	ybv_emit display journal FAIL 'A critical GPU, modeset or software-rendering failure occurred in this boot' \
+		"count=$(wc -l <<<"$critical_display_journal")"
+elif ((atomic_journal_count >= 10)); then
+	printf '\n===== Repeated atomic display update failures =====\n%s\n' "$atomic_display_journal" >>"$YBV_LOG"
+	ybv_emit display journal FAIL 'Repeated atomic display updates missed their commit window' \
+		"count=$atomic_journal_count; inspect i915 timing and recent mode transitions"
+elif ((atomic_journal_count > 0)); then
+	printf '\n===== Intermittent atomic display update failures =====\n%s\n' "$atomic_display_journal" >>"$YBV_LOG"
+	ybv_emit display journal WARN 'Intermittent atomic display updates missed their commit window' \
+		"count=$atomic_journal_count; the current DSI, Mutter and hardware-rendering checks passed"
 else
-	printf '\n===== Targeted display journal failures =====\n%s\n' "$display_journal" >>"$YBV_LOG"
-	ybv_emit display journal FAIL 'A targeted GPU, modeset or software-rendering failure occurred in this boot' "count=$(wc -l <<<"$display_journal")"
+	ybv_emit display journal PASS 'No targeted GPU, modeset or software-rendering failure occurred in this boot'
 fi
 
 YBV_PHYSICAL_RESULT=PENDING

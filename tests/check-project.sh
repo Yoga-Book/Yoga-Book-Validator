@@ -11,6 +11,7 @@ trap cleanup EXIT
 
 required=(
 	README.md ATTRIBUTION.md CONTRIBUTING.md LICENSE Makefile
+	docs/coverage.md
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
 	libexec/yogabook-validator-category.sh
@@ -101,6 +102,20 @@ printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
 )
 grep -Eq $'validator\tstate-preservation\tPASS\t' "$temporary/state-guard-restore/results.tsv"
 test ! -e "$temporary/state-guard-restore/state-diff.txt"
+mkdir -p "$state_guard_root/sys/class/leds/ybwmi::kbd_backlight"
+printf '[none]\n' >"$state_guard_root/sys/class/leds/ybwmi::kbd_backlight/trigger"
+printf '8\n' >"$state_guard_root/sys/class/leds/ybwmi::kbd_backlight/brightness"
+(
+	export YBV_SYSROOT="$state_guard_root"
+	export YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py"
+	# shellcheck source=../libexec/yogabook-validator-common.sh
+	. "$root/libexec/yogabook-validator-common.sh"
+	ybv_begin_report state-guard-async-halo "$temporary/state-guard-async-halo"
+	printf '0\n' >"$state_guard_root/sys/class/leds/ybwmi::kbd_backlight/brightness"
+	ybv_finish_report
+)
+grep -Eq $'validator\tstate-preservation\tPASS\t' "$temporary/state-guard-async-halo/results.tsv"
+test ! -e "$temporary/state-guard-async-halo/state-diff.txt"
 python3 - <<PY
 import ast
 import xml.etree.ElementTree as ET
@@ -129,6 +144,7 @@ PY
 [[ $cli_version == "$package_version" ]]
 [[ $metainfo_version == "$package_version" ]]
 grep -Fq "yogabook-validator_${package_version}_all.deb" "$root/README.md"
+grep -Fq 'docs/coverage.md' "$root/debian/yogabook-validator.docs"
 
 store_line=$(grep -n 'store yogabook' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
 stop_line=$(grep -n 'systemctl --user stop' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
@@ -220,6 +236,9 @@ grep -Fq 'camera_driver_bound /sys/bus/i2c/drivers/ov8858' "$root/libexec/yogabo
 grep -Fq 'dpkg --verify "$package"' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'package-integrity PASS' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'restart_count_before=' "$root/libexec/yogabook-validator-gnss.sh"
+grep -Fq 'runtime-assets FAIL' "$root/libexec/yogabook-validator-gnss.sh"
+grep -Fq 'yogabook-gnss-build-runtime' "$root/libexec/yogabook-validator-gnss.sh"
+grep -Fq 'gnss runtime-assets FAIL' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'service-stability PASS' "$root/libexec/yogabook-validator-gnss.sh"
 grep -Fq 'service-stability FAIL' "$root/libexec/yogabook-validator-gnss.sh"
 for report_writer in yogabook-validator-active.sh yogabook-validator-automated.sh; do
@@ -345,6 +364,9 @@ grep -Fq 'hdmi-lpe-audio' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq 'micro-hdmi' "$root/libexec/yogabook-validator-physical.sh"
 grep -Fq 'ambient-enabled' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq 'software-rendering failure' "$root/libexec/yogabook-validator-display.sh"
+grep -Fq 'atomic_journal_count >= 10' "$root/libexec/yogabook-validator-display.sh"
+grep -Fq 'Intermittent atomic display updates missed their commit window' "$root/libexec/yogabook-validator-display.sh"
+grep -Fq "name != 'ybwmi::kbd_backlight'" "$root/libexec/yogabook-validator-common.sh"
 if grep -Eq '(^|[^[:alpha:]])(read|read_loop|grab)\(' "$root/libexec/yogabook-validator-modes.sh"; then
 	echo 'mode-cycle validation must not read or grab input events' >&2
 	exit 1

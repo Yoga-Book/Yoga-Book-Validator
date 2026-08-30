@@ -40,6 +40,11 @@ radio, removable-media slot or hardware button works physically. Every report
 therefore contains separate `AUTOMATED_RESULT` and
 `PHYSICAL_ACCEPTANCE_RESULT` values.
 
+The authoritative [coverage matrix](docs/coverage.md) defines which automated,
+interactive and physical evidence is required before a component can be
+considered fully validated. A skipped conditional test is visible incomplete
+coverage, never an implicit pass.
+
 ## Install
 
 Build on Debian or Ubuntu:
@@ -48,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.26.8_all.deb
+sudo apt install ../yogabook-validator_0.27.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -126,15 +131,19 @@ perform the physical power cycle. `stability status` never changes progress.
 ## Safety model
 
 Every command captures a deterministic mutable-state snapshot before running
-and compares it after cleanup. The contract covers backlight and LED state,
-Bluetooth/rfkill, Yoga Book and desktop-audio service state, writable ALSA controls,
-the active desktop audio profile, orientation settings, Mutter layout,
+and compares it after cleanup. The contract covers backlight and stable LED
+policy, Bluetooth/rfkill, Yoga Book and desktop-audio service state, writable
+ALSA controls, the active desktop audio profile, orientation settings, Mutter layout,
 removable-media mounts and Validator temporary mounts. A mismatch is a real
 `validator/state-preservation` failure with `state-before.tsv`,
 `state-after.tsv` and `state-diff.txt` evidence. State-changing runners also
 register an idempotent cleanup callback that runs before the comparison, on
 both successful and failed checks; their existing exit traps remain the final
 safety net for interruption.
+The live Halo backlight level is excluded from the generic comparison because
+the keyboard service changes it asynchronously for idle and mode transitions;
+the dedicated `lights` action snapshots, exercises, restores and verifies that
+control explicitly.
 
 The audio and suspend helper is restricted to YB1-X91L by DMI. Before stopping
 WirePlumber it snapshots the live ALSA state. It restores that state and starts
