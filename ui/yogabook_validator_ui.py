@@ -193,7 +193,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 "Recommended workflows",
                 "Start here for a complete or non-invasive health assessment.",
                 [
-                    ("Run automated suite", "All transport checks except suspend, with one authorization", self.on_automated, True),
+                    ("Complete device acceptance", "Combine deep passive diagnostics and physical observations in one report", self.on_full, True),
+                    ("Run automated suite", "All transport checks except suspend, with one authorization", self.on_automated, False),
                     ("Run full passive suite", "All deep read-only checks in one merged report", self.on_passive, False),
                     ("Run passive audit", "Fast read-only checks; no administrator access", self.on_audit, False),
                 ],
@@ -857,6 +858,9 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_physical(self, _button) -> None:
         PhysicalWindow(self).present()
 
+    def on_full(self, _button) -> None:
+        PhysicalWindow(self, command="full").present()
+
     def show_error(self, heading: str, body: str) -> None:
         dialog = Adw.MessageDialog.new(self, heading, body)
         dialog.add_response("close", "Close")
@@ -864,21 +868,26 @@ class ValidatorWindow(Adw.ApplicationWindow):
 
 
 class PhysicalWindow(Adw.Window):
-    def __init__(self, parent: ValidatorWindow) -> None:
-        super().__init__(transient_for=parent, modal=True, title="Physical acceptance")
+    def __init__(self, parent: ValidatorWindow, command: str = "physical") -> None:
+        title = "Complete device acceptance" if command == "full" else "Physical acceptance"
+        super().__init__(transient_for=parent, modal=True, title=title)
         self.parent_window = parent
+        self.command = command
         self.set_default_size(760, 700)
         self.rows: list[tuple[str, Gtk.DropDown, Gtk.Entry]] = []
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
-        save = Gtk.Button(label="Save results")
+        save = Gtk.Button(label="Start validation" if command == "full" else "Save results")
         save.add_css_class("suggested-action")
         save.connect("clicked", self.on_save)
         header.pack_end(save)
         toolbar.add_top_bar(header)
         page = Adw.PreferencesPage()
-        page.set_description("Choose Skip for unavailable accessories or conditions, such as LTE without a SIM.")
+        description = "Choose Skip for unavailable accessories or conditions, such as LTE without a SIM."
+        if command == "full":
+            description = "Record the observations to include after deep passive diagnostics. " + description
+        page.set_description(description)
         group = Adw.PreferencesGroup(title="Observed hardware behavior")
         page.add(group)
         for check_id, label in PHYSICAL_CHECKS:
@@ -897,16 +906,16 @@ class PhysicalWindow(Adw.Window):
     def on_save(self, _button) -> None:
         cache = Path(GLib.get_user_cache_dir()) / "yogabook-validator"
         cache.mkdir(parents=True, exist_ok=True)
-        answers = cache / f"physical-{os.getpid()}.tsv"
+        answers = cache / f"{self.command}-{os.getpid()}.tsv"
         values = ["SKIP", "PASS", "FAIL"]
         with answers.open("w", encoding="utf-8", newline="") as stream:
             for check_id, dropdown, note in self.rows:
                 clean_note = note.get_text().replace("\t", " ").replace("\n", " ")
                 stream.write(f"{check_id}\t{values[dropdown.get_selected()]}\t{clean_note}\n")
-        output = self.parent_window.report_path("physical")
+        output = self.parent_window.report_path(self.command)
         self.close()
         self.parent_window.run_command(
-            "physical",
+            self.command,
             ["--answers", str(answers)],
             output,
             cleanup_files=[answers],

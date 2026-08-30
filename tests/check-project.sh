@@ -486,6 +486,9 @@ YBV_RESULTS_BASE="$temporary/results" YBV_LIBEXEC_DIR="$root/libexec" \
 	"$root/src/yogabook-validator.sh" physical --answers "$answers" --output "$temporary/physical"
 grep -Fq $'physical\tspeakers\tPASS' "$temporary/physical/results.tsv"
 grep -Fq 'PHYSICAL_ACCEPTANCE_RESULT: INCOMPLETE' "$temporary/physical/validator.log"
+grep -Fq 'PhysicalWindow(self, command="full").present()' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.parent_window.report_path(self.command)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.command,' "$root/ui/yogabook_validator_ui.py"
 python3 - "$root/ui/yogabook_validator_ui.py" "$temporary/physical/physical-results.tsv" <<'PY'
 import ast
 import csv
@@ -502,6 +505,84 @@ with open(sys.argv[2], newline="", encoding="utf-8") as stream:
     shell_ids = [row["check_id"] for row in csv.DictReader(stream, delimiter="\t")]
 assert ui_ids == shell_ids, (ui_ids, shell_ids)
 PY
+
+fake_passive="$temporary/fake-passive"
+fake_physical="$temporary/fake-physical"
+sed 's/^\t//' >"$fake_passive" <<'EOF'
+	#!/usr/bin/env bash
+	set -Eeuo pipefail
+	output=
+	while (($#)); do
+		case $1 in --output) output=$2; shift 2 ;; *) exit 2 ;; esac
+	done
+	[[ ${YBV_FAKE_PASSIVE_MISSING:-0} != 1 ]] || exit 1
+	mkdir -p "$output"
+	printf 'timestamp\tsubsystem\tcheck_id\tstatus\tsummary\tdetails\n' >"$output/results.tsv"
+	printf 'now\tplatform\tfake-passive\tPASS\tSynthetic passive check\tfixture\n' >>"$output/results.tsv"
+	printf 'now\tsuite\tnested\tPASS\tNested suite rollup\tfixture\n' >>"$output/results.tsv"
+	printf 'AUTOMATED_RESULT: PASS\nPHYSICAL_ACCEPTANCE_RESULT: PENDING\n' >"$output/validator.log"
+	if [[ ${YBV_FAKE_PASSIVE_FAIL:-0} == 1 ]]; then
+		sed -i 's/AUTOMATED_RESULT: PASS/AUTOMATED_RESULT: FAIL/' "$output/validator.log"
+		exit 1
+	fi
+EOF
+sed 's/^\t//' >"$fake_physical" <<'EOF'
+	#!/usr/bin/env bash
+	set -Eeuo pipefail
+	output=
+	while (($#)); do
+		case $1 in --output) output=$2; shift 2 ;; --answers) shift 2 ;; *) exit 2 ;; esac
+	done
+	mkdir -p "$output"
+	printf 'timestamp\tsubsystem\tcheck_id\tstatus\tsummary\tdetails\n' >"$output/results.tsv"
+	printf 'now\tphysical\tspeakers\tSKIP\tSynthetic physical observation\tquiet fixture\n' >>"$output/results.tsv"
+	printf 'check_id\tstatus\tnote\nspeakers\tSKIP\tquiet fixture\n' >"$output/physical-results.tsv"
+	printf 'AUTOMATED_RESULT: PASS\nPHYSICAL_ACCEPTANCE_RESULT: INCOMPLETE\n' >"$output/validator.log"
+EOF
+chmod +x "$fake_passive" "$fake_physical"
+mkdir -p "$temporary/full-sysroot/proc/sys/kernel/random"
+printf 'fixture-boot\n' >"$temporary/full-sysroot/proc/sys/kernel/random/boot_id"
+YBV_SYSROOT="$temporary/full-sysroot" YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py" \
+	YBV_PASSIVE_RUNNER="$fake_passive" YBV_PHYSICAL_RUNNER="$fake_physical" \
+	"$root/src/yogabook-validator.sh" full --answers "$answers" --output "$temporary/full"
+for report_file in results.tsv validator.log environment.tsv report.json report.md report.html physical-results.tsv; do
+	test -s "$temporary/full/$report_file"
+done
+test -s "$temporary/full/passive/results.tsv"
+test -s "$temporary/full/physical/results.tsv"
+grep -Fq $'platform\tfake-passive\tPASS' "$temporary/full/results.tsv"
+grep -Fq $'physical\tspeakers\tSKIP' "$temporary/full/results.tsv"
+grep -Fq 'PHYSICAL_ACCEPTANCE_RESULT: INCOMPLETE' "$temporary/full/validator.log"
+grep -Eq $'validator\tstate-preservation\tPASS\t' "$temporary/full/results.tsv"
+python3 - "$temporary/full/report.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    report = json.load(stream)
+assert report["run"]["command"] == "full"
+assert report["run"]["physical_acceptance_result"] == "INCOMPLETE"
+assert report["summary"]["checks_total"] == 3
+assert report["summary"]["observations_total"] == 3
+assert report["summary"]["suite_rollups"]["total"] == 3
+PY
+full_failure_rc=0
+YBV_SYSROOT="$temporary/full-sysroot" YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py" \
+	YBV_PASSIVE_RUNNER="$fake_passive" YBV_PHYSICAL_RUNNER="$fake_physical" YBV_FAKE_PASSIVE_FAIL=1 \
+	"$root/src/yogabook-validator.sh" full --answers "$answers" --output "$temporary/full-failure" || full_failure_rc=$?
+[[ $full_failure_rc -eq 1 ]]
+grep -Eq $'validator\tpassive-execution\tFAIL\t' "$temporary/full-failure/results.tsv"
+grep -Fq 'AUTOMATED_RESULT: FAIL' "$temporary/full-failure/validator.log"
+full_missing_rc=0
+YBV_SYSROOT="$temporary/full-sysroot" YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py" \
+	YBV_PASSIVE_RUNNER="$fake_passive" YBV_PHYSICAL_RUNNER="$fake_physical" YBV_FAKE_PASSIVE_MISSING=1 \
+	"$root/src/yogabook-validator.sh" full --answers "$answers" --output "$temporary/full-missing" || full_missing_rc=$?
+[[ $full_missing_rc -eq 1 ]]
+[[ $(grep -Ec $'validator\tpassive-report\tFAIL\t' "$temporary/full-missing/results.tsv") -eq 1 ]]
+if grep -Eq $'validator\tpassive-execution\tFAIL\t' "$temporary/full-missing/results.tsv"; then
+	echo 'missing subreport must produce one root failure' >&2
+	exit 1
+fi
 
 fake="$temporary/root"
 mkdir -p "$fake/sys/class/dmi/id" "$fake/proc/asound/card7" "$fake/proc/bus/input" \

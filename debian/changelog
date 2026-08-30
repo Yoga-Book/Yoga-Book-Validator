@@ -1,3 +1,14 @@
+yogabook-validator (0.28.0) unstable; urgency=medium
+
+  * Produce one complete report that aggregates passive diagnostics and guided
+    physical acceptance while retaining both detailed subreports.
+  * Add a recommended complete-device workflow to the graphical interface and
+    preserve skipped physical conditions as explicit incomplete coverage.
+  * Propagate subreport failures without double-counting suite rollups and
+    verify successful and failed aggregation paths with silent fixtures.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 02:31:00 +0200
+
 yogabook-validator (0.27.1) unstable; urgency=medium
 
   * Verify the effective GRUB_TOP_LEVEL, kernel image, initrd and running
