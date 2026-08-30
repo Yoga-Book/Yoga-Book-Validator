@@ -283,6 +283,7 @@ grep -Fq 'self.run_command("headset", ["--yes", "--timeout", "90"])' "$root/ui/y
 grep -Fq 'self.run_command("quiet", ["--yes"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("dossier", [str(source) for source in sources])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'chooser.set_select_multiple(True)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'Layer readiness · ' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"

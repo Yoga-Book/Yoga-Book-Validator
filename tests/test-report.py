@@ -74,6 +74,10 @@ class ReportRendererTest(unittest.TestCase):
         self.assertEqual(model["data_quality"]["inconsistent_checks"], 1)
         self.assertEqual(model["acceptance"]["summary"]["components_total"], 23)
         self.assertEqual(model["acceptance"]["summary"]["components_complete"], 0)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["structural"]["components_total"], 23)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["structural"]["components_complete"], 0)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["functional"]["components_complete"], 0)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["physical"]["components_complete"], 0)
         self.assertEqual(model["acceptance"]["matrix"]["file"], "acceptance.json")
         self.assertEqual(len(model["acceptance"]["matrix"]["sha256"]), 64)
         gnss = next(item for item in model["acceptance"]["components"] if item["id"] == "gnss")
@@ -102,6 +106,9 @@ class ReportRendererTest(unittest.TestCase):
         self.assertIn("Independent check totals exclude suite roll-ups", rendered_html)
         self.assertIn("Device acceptance readiness", rendered_html)
         self.assertIn("0/23", rendered_html)
+        self.assertIn("Structural ready", rendered_html)
+        self.assertIn("Functional ready", rendered_html)
+        self.assertIn("Physical ready", rendered_html)
         self.assertIn("&lt;unsafe&gt;", rendered_html)
         self.assertNotIn("unit=failed <unsafe>", rendered_html)
         rendered_markdown = (self.report / "report.md").read_text(encoding="utf-8")
@@ -109,6 +116,7 @@ class ReportRendererTest(unittest.TestCase):
         self.assertIn(r"unit=failed \<unsafe\>", rendered_markdown)
         self.assertIn("## Device acceptance readiness", rendered_markdown)
         self.assertIn("0 of 23 components complete", rendered_markdown)
+        self.assertIn("Layer readiness:", rendered_markdown)
 
     def test_rejects_incomplete_report_directory(self) -> None:
         (self.report / "validator.log").unlink()
@@ -125,6 +133,19 @@ class ReportRendererTest(unittest.TestCase):
             stream.write(
                 "2026-08-29T10:00:05+02:00\tinput\tplatform-buttons-capabilities\tPASS\tButtons exposed\t\n"
                 "2026-08-29T10:00:05+02:00\tinput\tlid-switch-capabilities\tPASS\tLid exposed\t\n"
+            )
+        subprocess.run([sys.executable, str(RENDERER), str(self.report)], check=True)
+        model = json.loads((self.report / "report.json").read_text(encoding="utf-8"))
+        buttons = next(item for item in model["acceptance"]["components"] if item["id"] == "buttons-lid")
+        self.assertEqual(buttons["status"], "NOT_RUN")
+        self.assertEqual(buttons["layers"]["structural"]["status"], "PASS")
+        self.assertEqual(model["acceptance"]["summary"]["components_complete"], 0)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["structural"]["components_complete"], 1)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["functional"]["components_complete"], 0)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["physical"]["components_complete"], 0)
+
+        with (self.report / "results.tsv").open("a", encoding="utf-8") as stream:
+            stream.write(
                 "2026-08-29T10:00:06+02:00\tphysical\thardware-buttons\tPASS\tButtons observed\t\n"
                 "2026-08-29T10:00:06+02:00\tphysical\tlid-switch\tPASS\tLid observed\t\n"
             )
@@ -138,6 +159,9 @@ class ReportRendererTest(unittest.TestCase):
         )
         self.assertEqual(model["acceptance"]["summary"]["components_complete"], 1)
         self.assertEqual(model["acceptance"]["summary"]["readiness_percent"], 4.3)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["structural"]["components_complete"], 1)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["functional"]["components_complete"], 1)
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["physical"]["components_complete"], 1)
 
 
 if __name__ == "__main__":

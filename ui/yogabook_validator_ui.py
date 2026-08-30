@@ -863,6 +863,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         for row in self.acceptance_rows:
             self.acceptance.remove(row)
         self.acceptance_rows.clear()
+        self.acceptance.set_description("")
         self.acceptance.set_visible(False)
 
     def render_report(self, report: Path) -> None:
@@ -895,6 +896,15 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 subtitle += f" · {accepted}/{component_total} components accepted"
             self.overview_row.set_subtitle(subtitle)
             if acceptance:
+                layer_readiness = readiness.get("layers", {})
+                if all(layer in layer_readiness for layer in ("structural", "functional", "physical")):
+                    self.acceptance.set_description(
+                        "Layer readiness · "
+                        + " · ".join(
+                            f"{layer.title()} {layer_readiness[layer]['components_complete']}/{component_total}"
+                            for layer in ("structural", "functional", "physical")
+                        )
+                    )
                 self.acceptance.set_visible(True)
                 for component in acceptance.get("components", []):
                     layers = component["layers"]

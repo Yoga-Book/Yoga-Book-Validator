@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.34.0_all.deb
+sudo apt install ../yogabook-validator_0.35.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -110,7 +110,10 @@ It also evaluates all 23 hardware components against the structural,
 functional and physical layers in the coverage matrix. A component contributes
 to acceptance readiness only when every required selector is present and
 passes; missing runnable evidence is `NOT_RUN`, unavailable test coverage is
-`UNIMPLEMENTED`, and skipped evidence is `INCOMPLETE`.
+`UNIMPLEMENTED`, and skipped evidence is `INCOMPLETE`. The conservative overall
+readiness remains unchanged, while separate structural, functional and physical
+readiness metrics show exactly which evidence layer is complete without
+promoting a partially validated component.
 
 Use `yogabook-validator report DIRECTORY` to regenerate the derived formats
 from an older raw report. Active hardware tests and category suites ask for

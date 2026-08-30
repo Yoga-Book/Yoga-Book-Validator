@@ -1,3 +1,14 @@
+yogabook-validator (0.35.0) unstable; urgency=medium
+
+  * Preserve conservative whole-device acceptance while reporting structural,
+    functional and physical component readiness separately.
+  * Expose per-layer totals, percentages and status counts in JSON, Markdown
+    and the self-contained HTML dashboard.
+  * Cover partially validated components so strong structural evidence remains
+    visible without being promoted to complete acceptance.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 06:50:00 +0200
+
 yogabook-validator (0.34.0) unstable; urgency=medium
 
   * Add an integrity-checked acceptance dossier that composes explicitly

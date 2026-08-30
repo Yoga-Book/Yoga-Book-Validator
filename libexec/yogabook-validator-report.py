@@ -277,6 +277,19 @@ def build_acceptance(rows: list[dict[str, str]]) -> dict[str, Any]:
     counts = Counter(component["status"] for component in components)
     complete = counts["PASS"]
     total = len(components)
+    layer_readiness = {}
+    for layer_name in ACCEPTANCE_LAYERS:
+        layer_counts = Counter(component["layers"][layer_name]["status"] for component in components)
+        layer_complete = layer_counts["PASS"]
+        layer_readiness[layer_name] = {
+            "components_complete": layer_complete,
+            "components_total": total,
+            "readiness_percent": round(layer_complete / total * 100, 1) if total else 0.0,
+            "counts": {
+                status: layer_counts[status]
+                for status in ("PASS", "FAIL", "WARN", "UNIMPLEMENTED", "INCOMPLETE", "NOT_RUN")
+            },
+        }
     return {
         "schema": matrix["schema"],
         "matrix": file_evidence(matrix_path),
@@ -288,6 +301,7 @@ def build_acceptance(rows: list[dict[str, str]]) -> dict[str, Any]:
                 status: counts[status]
                 for status in ("PASS", "FAIL", "WARN", "UNIMPLEMENTED", "INCOMPLETE", "NOT_RUN")
             },
+            "layers": layer_readiness,
             "note": "A component is complete only when structural, functional and physical layers all pass.",
         },
         "components": components,
@@ -486,6 +500,14 @@ def render_markdown(model: dict[str, Any]) -> str:
         "",
         f"**{readiness['components_complete']} of {readiness['components_total']} components complete "
         f"({readiness['readiness_percent']}%).** Structural, functional and physical layers must all pass.",
+        "Layer readiness: "
+        + ", ".join(
+            f"**{layer.title()} {readiness['layers'][layer]['components_complete']}/"
+            f"{readiness['layers'][layer]['components_total']} "
+            f"({readiness['layers'][layer]['readiness_percent']}%)**"
+            for layer in ACCEPTANCE_LAYERS
+        )
+        + ".",
         f"Matrix SHA-256: `{acceptance['matrix']['sha256']}`.",
         "",
         "| Component | Overall | Structural | Functional | Physical |",
@@ -570,6 +592,11 @@ def render_html(model: dict[str, Any]) -> str:
     counts = summary["counts"]
     acceptance = model["acceptance"]
     readiness = acceptance["summary"]
+    layer_metrics = "".join(
+        f"<div class='metric'><b>{readiness['layers'][layer]['components_complete']}/"
+        f"{readiness['layers'][layer]['components_total']}</b>{html.escape(layer.title())} ready</div>"
+        for layer in ACCEPTANCE_LAYERS
+    )
     status_class = "fail" if counts["FAIL"] else ("warn" if counts["WARN"] else "pass")
     finding_cards = []
     for finding in model["findings"]:
@@ -636,7 +663,7 @@ td small{{display:block;color:var(--muted);margin-top:4px;overflow-wrap:anywhere
 <p class='muted'>Independent check totals exclude suite roll-ups. Repeated observations remain available for consistency analysis.</p></section>
 <section class='cards'><div class='metric'><b>{counts['PASS']}</b>Passed</div><div class='metric'><b>{counts['FAIL']}</b>Failed</div>
 <div class='metric'><b>{counts['WARN']}</b>Warnings</div><div class='metric'><b>{counts['SKIP']}</b>Skipped</div><div class='metric'><b>{summary['coverage_percent']}%</b>Check coverage</div>
-<div class='metric'><b>{readiness['components_complete']}/{readiness['components_total']}</b>Components accepted</div></section>
+<div class='metric'><b>{readiness['components_complete']}/{readiness['components_total']}</b>Components accepted</div>{layer_metrics}</section>
 <h2>Device acceptance readiness · {readiness['readiness_percent']}%</h2><p class='muted'>A component is complete only when structural, functional and physical evidence all pass. Matrix SHA-256: <code>{html.escape(acceptance['matrix']['sha256'])}</code>.</p>
 <section class='panel table-wrap'><table><thead><tr><th>Component</th><th>Overall</th><th>Structural</th><th>Functional</th><th>Physical</th></tr></thead><tbody>{acceptance_rows}</tbody></table></section>
 <h2>Priority findings</h2><section class='findings'>{''.join(finding_cards)}</section>
