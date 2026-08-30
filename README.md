@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.31.0_all.deb
+sudo apt install ../yogabook-validator_0.32.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -72,6 +72,7 @@ yogabook-validator audio
 yogabook-validator camera
 yogabook-validator display
 yogabook-validator haptics
+yogabook-validator headset
 yogabook-validator inputs
 yogabook-validator lights
 yogabook-validator modem
@@ -233,13 +234,23 @@ logging their identity, or records SKIP when no OTG accessory is connected.
 The automated suite requests authorization once, runs all transport checks in
 a deterministic order, preserves every subreport and creates a merged
 `results.tsv`. It continues after failures so the report contains complete
-evidence. Suspend remains opt-in.
+evidence. Suspend remains opt-in, while the guided wired-headset workflow is a
+separate action and part of the Audio/Media category.
 
 The LTE test never enables, connects or disconnects the modem. Without a SIM it
 records explicit conditional skips. With a SIM it requires an already
 registered modem and connected bearer, then sends three packets through that
 bearer's interface to its gateway (or a fixed public probe when no gateway is
 reported). No IMSI, IMEI, APN or operator identity is retained in reports.
+
+The wired-headset test is conditional and exits before opening any PCM unless
+both four-pole jack sensors report an inserted headset. It enables only the UCM
+`Headphones` and `Headset` routes, verifies that the physical speakers remain
+muted, plays one quiet one-second tone, analyzes a three-second microphone
+capture, then guides one removal, reinsertion and supported button press. The
+event device is never grabbed and the run completes only after the headset is
+inserted again. ALSA and desktop audio are restored and verified with a silent
+transport probe.
 
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
@@ -273,7 +284,9 @@ the frames and restores the original focus, input and processor state.
 GNOME Shell display stack without changing it. With Micro-HDMI connected it
 requires an active mode and valid ALSA ELD audio negotiation, but never plays
 sound. `haptics` plays one bounded 150 ms pulse on each
-actuator at moderate strength. `inputs` audits kernel capability maps without
+actuator at moderate strength. `headset` validates a connected four-pole
+headset's isolated playback, microphone signal and removal/reinsertion/button
+events. `inputs` audits kernel capability maps without
 reading events. `modes` observes one physical Halo keyboard to Wacom pen to
 Halo keyboard cycle and accepts `--timeout SECONDS`. `rotation` extends that
 cycle and requires all four sensor orientations to match stable Mutter

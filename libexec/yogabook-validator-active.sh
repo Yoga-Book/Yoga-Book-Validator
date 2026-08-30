@@ -40,7 +40,7 @@ while (($#)); do
 		[[ $# -ge 2 ]] || { echo 'ERROR: --seconds requires a value' >&2; exit 2; }
 		suspend_seconds=$2; shift 2 ;;
 	--timeout)
-		[[ $action == modes || $action == rotation ]] || { echo 'ERROR: --timeout is valid only for modes or rotation' >&2; exit 2; }
+		[[ $action == modes || $action == rotation || $action == headset ]] || { echo 'ERROR: --timeout is valid only for modes, rotation or headset' >&2; exit 2; }
 		[[ $# -ge 2 ]] || { echo 'ERROR: --timeout requires a value' >&2; exit 2; }
 		mode_timeout=$2; shift 2 ;;
 	*)
@@ -66,7 +66,7 @@ category)
 	recommended)
 		prompt='This category runs the optimized union of the automated, full-passive, and quick-audit workflows without repeating their overlapping checks.' ;;
 	audio-media)
-		prompt='This category runs display inspection, both camera captures, reversible light checks, and the audible audio test in a safe sequence.' ;;
+		prompt='This category runs display inspection, both camera captures, reversible light checks, internal audio and a conditional wired-headset test in a safe sequence.' ;;
 	input-modes)
 		prompt='This interactive category inspects input capabilities, pulses both haptics, then guides you through keyboard, pen, and all four display orientations.' ;;
 	platform-power)
@@ -81,6 +81,8 @@ camera)
 	prompt='This test pauses the desktop camera processor, captures three private AtomISP frames from each sensor, checks rear focus, then restores the original route and processor state.' ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
+headset)
+	prompt="This test requires a connected four-pole headset. It plays one quiet one-second tone only through the headphones, records three seconds from the headset microphone, then asks for one unplug, reinsert and button cycle within ${mode_timeout} seconds. Speakers remain muted and all audio state is restored." ;;
 inputs)
 	prompt='This test reads kernel input capability maps without grabbing devices, monitoring events, or injecting input.' ;;
 lights)
@@ -113,7 +115,7 @@ if [[ $action == haptics || $action == inputs || $action == modes || $action == 
 elif [[ $action == automated || $action == camera || $action == category || $action == lights || $action == storage || $action == storage-write || $action == wireless ]]; then
 	:
 else
-	for required in alsactl alsaucm aplay arecord pactl parec pw-play wpctl systemctl timeout python3; do
+	for required in alsactl alsaucm amixer aplay arecord pactl parec pw-play wpctl systemctl timeout python3; do
 		ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
 	done
 	[[ $action != suspend ]] || ybv_has_command rtcwake || { echo 'ERROR: missing command: rtcwake' >&2; exit 2; }
@@ -287,9 +289,26 @@ if [[ -z $card_number ]]; then
 	exit 1
 fi
 
+if [[ $action == headset ]]; then
+	headphone_inserted=false
+	microphone_inserted=false
+	amixer -c yogabook cget name='Headphone Jack' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' && headphone_inserted=true
+	amixer -c yogabook cget name='Headset Mic Jack' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' && microphone_inserted=true
+	if [[ $headphone_inserted != true || $microphone_inserted != true ]]; then
+		ybv_emit audio headset-playback SKIP 'No connected four-pole headset is available for playback validation' "headphone=$headphone_inserted microphone=$microphone_inserted"
+		ybv_emit audio headset-capture SKIP 'No connected four-pole headset is available for microphone validation' "headphone=$headphone_inserted microphone=$microphone_inserted"
+		ybv_emit input headset-events SKIP 'Connect a four-pole headset to validate jack and button events' "headphone=$headphone_inserted microphone=$microphone_inserted"
+		finish_rc=0
+		finish_report_for_user || finish_rc=$?
+		exit "$finish_rc"
+	fi
+fi
+
 state_file="$YBV_REPORT_DIR/alsa-state"
 capture_file="$YBV_REPORT_DIR/mic1.wav"
+[[ $action != headset ]] || capture_file="$YBV_REPORT_DIR/headset-mic.wav"
 tone_file="$YBV_REPORT_DIR/tone.wav"
+silence_file="$YBV_REPORT_DIR/silence.wav"
 desktop_probe_file="$YBV_REPORT_DIR/desktop-monitor.raw"
 wireplumber_stopped=false
 state_saved=false
@@ -302,7 +321,7 @@ desktop_profile=
 playback_log="$YBV_REPORT_DIR/suspend-playback.log"
 capture_log="$YBV_REPORT_DIR/suspend-capture.log"
 
-python3 - "$tone_file" <<'PY'
+python3 - "$tone_file" "$silence_file" <<'PY'
 import math, struct, sys, wave
 rate = 48000
 with wave.open(sys.argv[1], "wb") as wav:
@@ -310,11 +329,15 @@ with wave.open(sys.argv[1], "wb") as wav:
     for i in range(rate):
         value = int(0.08 * 32767 * math.sin(2 * math.pi * 440 * i / rate))
         wav.writeframesraw(struct.pack("<hh", value, value))
+with wave.open(sys.argv[2], "wb") as wav:
+    wav.setparams((2, 2, rate, rate, "NONE", "not compressed"))
+    wav.writeframes(b"\0" * rate * 2 * 2)
 PY
 
 desktop_audio_probe() {
 	local monitor_pid playback_probe_pid playback_rc=0 monitor_rc=0
-	local default_sink='' sink_running=false pcm_running=false signal=''
+	local default_sink='' sink_running=false pcm_running=false signal='' probe_asset="$tone_file" route='speakers' probe_bytes=0
+	[[ $action != headset ]] || probe_asset=$silence_file
 
 	: >"$desktop_probe_file"
 	default_sink=$(ybv_run_as_user "$real_user" timeout 3 pactl get-default-sink 2>/dev/null) || return 1
@@ -322,7 +345,7 @@ desktop_audio_probe() {
 		--format=s16le --rate=48000 --channels=2 --raw >"$desktop_probe_file" 2>>"$YBV_LOG" &
 	monitor_pid=$!
 	sleep 0.5
-	ybv_run_as_user "$real_user" timeout 5 pw-play "$tone_file" >>"$YBV_LOG" 2>&1 &
+	ybv_run_as_user "$real_user" timeout 5 pw-play "$probe_asset" >>"$YBV_LOG" 2>&1 &
 	playback_probe_pid=$!
 	for _ in {1..20}; do
 		if ybv_run_as_user "$real_user" timeout 2 pactl list sinks short 2>/dev/null |
@@ -339,7 +362,16 @@ desktop_audio_probe() {
 	wait "$monitor_pid" || monitor_rc=$?
 	[[ $monitor_rc -eq 0 || $monitor_rc -eq 124 ]] || return 1
 	[[ $playback_rc -eq 0 && $sink_running == true && $pcm_running == true ]] || return 1
-	amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+	case $desktop_profile in
+	*Headphones* | *Headset*)
+		route=headphones
+		amixer -c yogabook cget name='Headphone Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(off|0)' || return 1
+		;;
+	*)
+		amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
+		;;
+	esac
 	case $desktop_profile in
 	*Mic1*)
 		amixer -c yogabook cget name='Int Mic Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
@@ -352,7 +384,12 @@ desktop_audio_probe() {
 		amixer -c yogabook cget name='Sto1 ADC MIXR ADC1 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
 		;;
 	esac
-	signal=$(python3 - "$desktop_probe_file" <<'PY'
+	if [[ $action == headset ]]; then
+		probe_bytes=$(wc -c <"$desktop_probe_file")
+		((probe_bytes > 0)) || return 1
+		signal="bytes=$probe_bytes silent=yes"
+	else
+		signal=$(python3 - "$desktop_probe_file" <<'PY'
 import math, struct, sys
 raw = open(sys.argv[1], "rb").read()
 samples = struct.unpack(f"<{len(raw)//2}h", raw) if raw else ()
@@ -361,8 +398,9 @@ rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
 print(f"bytes={len(raw)} peak={peak} rms={rms:.2f}")
 raise SystemExit(0 if peak and rms else 1)
 PY
-	) || return 1
-	printf 'desktop probe: sink=RUNNING pcm0=RUNNING speaker=on %s\n' "$signal" >>"$YBV_LOG"
+		) || return 1
+	fi
+	printf 'desktop probe: sink=RUNNING pcm0=RUNNING route=%s %s\n' "$route" "$signal" >>"$YBV_LOG"
 }
 
 restore_state() {
@@ -413,7 +451,7 @@ restore_state() {
 			desktop_wait_started=$SECONDS
 			for _ in {1..60}; do
 				if ybv_run_as_user "$real_user" timeout 2 wpctl status 2>/dev/null |
-					grep -Fq 'Built-in Audio Stereo Speakers'; then
+					grep -Fq 'Built-in Audio'; then
 					consecutive_ready=$((consecutive_ready + 1))
 					if ((consecutive_ready >= 3)); then
 						desktop_ready_seconds=$((SECONDS - desktop_wait_started))
@@ -489,8 +527,15 @@ else
 	ybv_emit audio exclusive-access PASS 'No competing PCM client remains'
 fi
 
-if alsaucm -c hw:yogabook set _verb HiFi set _enadev Speaker1 set _enadev Mic1 >>"$YBV_LOG" 2>&1; then
-	ybv_emit audio ucm-routes PASS 'Enabled HiFi Speaker1 and Mic1 routes'
+if [[ $action == headset ]]; then
+	ucm_playback=Headphones
+	ucm_capture=Headset
+else
+	ucm_playback=Speaker1
+	ucm_capture=Mic1
+fi
+if alsaucm -c hw:yogabook set _verb HiFi set _enadev "$ucm_playback" set _enadev "$ucm_capture" >>"$YBV_LOG" 2>&1; then
+	ybv_emit audio ucm-routes PASS "Enabled HiFi $ucm_playback and $ucm_capture routes"
 else
 	ybv_emit audio ucm-routes FAIL 'Could not enable UCM audio routes'
 fi
@@ -560,6 +605,52 @@ PY
 	else
 		ybv_emit audio mic-signal FAIL 'Mic1 WAV was not created'
 	fi
+elif [[ $action == headset ]]; then
+	headset_route_ready=true
+	amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(off|0)' || headset_route_ready=false
+	amixer -c yogabook cget name='Headphone Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || headset_route_ready=false
+	if [[ $headset_route_ready == true ]] && timeout 15 aplay -q -D hw:yogabook,0 "$tone_file" >>"$YBV_LOG" 2>&1; then
+		ybv_emit audio headset-playback PASS 'Headphone-only UCM route played a bounded one-second tone' '440 Hz, 8% digital amplitude; speakers=off'
+	else
+		ybv_emit audio headset-playback FAIL 'Headphone-only playback route or bounded tone failed' "route-ready=$headset_route_ready"
+	fi
+
+	headset_capture_ready=true
+	for control in 'Headset Mic Switch' 'Sto1 ADC MIXL ADC1 Switch' 'Sto1 ADC MIXR ADC1 Switch'; do
+		amixer -c yogabook cget name="$control" 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || headset_capture_ready=false
+	done
+	if [[ $headset_capture_ready == true ]] &&
+		timeout 15 arecord -q -D hw:yogabook,0 -t wav -f S16_LE -r 48000 -c 2 -d 3 "$capture_file" >>"$YBV_LOG" 2>&1 &&
+		[[ -s $capture_file ]]; then
+		if signal=$(python3 - "$capture_file" <<'PY'
+import math, struct, sys, wave
+with wave.open(sys.argv[1], "rb") as wav:
+    frames = wav.readframes(wav.getnframes())
+samples = struct.unpack(f"<{len(frames)//2}h", frames) if frames else ()
+peak = max(map(abs, samples), default=0)
+rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
+clipped = sum(abs(x) >= 32760 for x in samples) / len(samples) if samples else 1
+print(f"peak={peak} ({peak/32768:.6f} FS), rms={rms:.2f} ({rms/32768:.6f} FS), clipped={clipped:.6f}")
+raise SystemExit(0 if peak >= 32 and rms >= 1 and clipped < 0.05 else 1)
+PY
+		); then
+			ybv_emit audio headset-capture PASS 'Headset microphone capture contains a plausible non-clipped signal' "$signal"
+		else
+			ybv_emit audio headset-capture FAIL 'Headset microphone capture is empty, implausibly weak or clipped' "${signal:-no samples}"
+		fi
+	else
+		ybv_emit audio headset-capture FAIL 'Headset microphone route or three-second capture failed' "route-ready=$headset_capture_ready"
+	fi
+
+	printf 'ACTION_REQUIRED: Unplug the wired headset, reinsert it fully, then press one headset media or volume button within %s seconds. Leave it inserted.\n' "$mode_timeout" | tee -a "$YBV_LOG"
+	headset_event_rc=0
+	headset_event_details=$(timeout "$((mode_timeout + 5))" python3 \
+		"$LIBEXEC_DIR/yogabook-validator-headset-events.py" --timeout "$mode_timeout" 2>>"$YBV_LOG") || headset_event_rc=$?
+	if ((headset_event_rc == 0)); then
+		ybv_emit input headset-events PASS 'Observed headset removal, reinsertion and a supported button press' "$headset_event_details"
+	else
+		ybv_emit input headset-events FAIL 'Headset event cycle did not complete with the jack reinserted' "exit=$headset_event_rc ${headset_event_details:-no events}"
+	fi
 else
 	stream_seconds=$((suspend_seconds + 14))
 	test_start=$(date --iso-8601=seconds)
@@ -614,7 +705,11 @@ if restore_state; then
 		if [[ $desktop_recovery_used == true ]]; then
 			ybv_emit audio desktop-recovery WARN 'Desktop playback required a second full audio-graph restart'
 		fi
-		ybv_emit audio state-restore PASS 'Restored ALSA state and verified desktop playback through the speaker sink' "ready after ${desktop_ready_seconds}s"
+		if [[ $action == headset ]]; then
+			ybv_emit audio state-restore PASS 'Restored ALSA state and verified silent desktop playback transport through the original sink' "ready after ${desktop_ready_seconds}s"
+		else
+			ybv_emit audio state-restore PASS 'Restored ALSA state and verified desktop playback through the original sink' "ready after ${desktop_ready_seconds}s"
+		fi
 	else
 		ybv_emit audio state-restore PASS 'Restored ALSA state; no desktop user services were managed'
 	fi

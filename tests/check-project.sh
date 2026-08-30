@@ -21,6 +21,7 @@ required=(
 	libexec/yogabook-validator-camera-capture.py
 	libexec/yogabook-validator-display.sh
 	libexec/yogabook-validator-hdmi-link.py
+	libexec/yogabook-validator-headset-events.py
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
 	libexec/yogabook-validator-modem.py libexec/yogabook-validator-modem.sh
@@ -73,6 +74,7 @@ fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py" "$root"/libexec/*.py
 python3 "$root/tests/test-report.py"
 python3 "$root/tests/test-hdmi-link.py"
+python3 "$root/tests/test-headset-events.py"
 python3 "$root/tests/test-modem.py"
 python3 - "$root/data/acceptance.json" "$root/docs/coverage.md" "$root/ui/yogabook_validator_ui.py" <<'PY'
 import ast
@@ -94,7 +96,7 @@ declared = {
     for selector in layer
 }
 assert set(matrix["unimplemented_selectors"]) <= declared
-assert len(matrix["unimplemented_selectors"]) == 3
+assert len(matrix["unimplemented_selectors"]) == 0
 
 table_names = set()
 for line in Path(sys.argv[2]).read_text(encoding="utf-8").splitlines():
@@ -239,7 +241,7 @@ if grep -Fq 'set _verb HiFi list _devices' "$root/libexec/yogabook-validator-che
 	echo 'passive audit must not activate a UCM verb' >&2
 	exit 1
 fi
-grep -Fq "Built-in Audio Stereo Speakers" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "grep -Fq 'Built-in Audio'" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'suspend-playback.log' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'suspend-capture.log' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'stream-xruns' "$root/libexec/yogabook-validator-active.sh"
@@ -274,6 +276,7 @@ grep -Fq 'stability ACTION       Track operator-confirmed cold-boot validation' 
 grep -Fq 'self.run_command("passive", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("resources", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("modem", [])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.run_command("headset", ["--yes", "--timeout", "90"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
@@ -352,8 +355,19 @@ done
 grep -Fq 'run_subtest automated' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest resources' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'run_subtest headset' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest modem' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest modem' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq "cget name='Headphone Jack'" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "cget name='Headset Mic Jack'" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "cget name='Speaker Switch'" "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'speakers=off' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'silence.wav' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq 'yogabook-validator-headset-events.py' "$root/libexec/yogabook-validator-active.sh"
+if grep -Fq '.grab(' "$root/libexec/yogabook-validator-headset-events.py"; then
+	echo 'headset event validation must not grab the input device' >&2
+	exit 1
+fi
 grep -Fq '["ping", "-I", interface, "-c", "3"' "$root/libexec/yogabook-validator-modem.py"
 grep -Fq 'state-failed-reason' "$root/libexec/yogabook-validator-modem.py"
 if grep -Eq 'simple-connect|--enable|--disable|connection (up|down)' "$root/libexec/yogabook-validator-modem.py" "$root/libexec/yogabook-validator-modem.sh"; then
@@ -371,6 +385,8 @@ grep -Fq 'GLib.idle_add(self.append_console, line)' "$root/ui/yogabook_validator
 grep -Fq 'subtest_start = re.match(r"^===== Running ([a-z0-9-]+) =====$", clean)' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.set_subtest_running(subtest_start.group(1))' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.set_subtest_result(check_id, status)' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'status == "SKIP"' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'media-playback-pause-symbolic' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.set_row_running(self.active_subtests[-1][1])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.set_run_buttons_sensitive(False)' "$root/ui/yogabook_validator_ui.py"
 grep -Fq '"Stop validation"' "$root/ui/yogabook_validator_ui.py"
@@ -438,6 +454,10 @@ if grep -Fq 'run_subtest modes' "$root/libexec/yogabook-validator-automated.sh";
 fi
 if grep -Fq 'run_subtest rotation' "$root/libexec/yogabook-validator-automated.sh"; then
 	echo 'physical all-orientations validation must not be part of automated' >&2
+	exit 1
+fi
+if grep -Fq 'run_subtest headset' "$root/libexec/yogabook-validator-automated.sh"; then
+	echo 'guided headset validation must not be part of automated' >&2
 	exit 1
 fi
 grep -Fq 'rotation               Verify all four automatic display orientations' "$root/src/yogabook-validator.sh"

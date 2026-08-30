@@ -86,6 +86,9 @@ class ReportRendererTest(unittest.TestCase):
         lte = next(item for item in model["acceptance"]["components"] if item["id"] == "lte")
         self.assertEqual(lte["layers"]["functional"]["status"], "NOT_RUN")
         self.assertIn("modem/registration", lte["layers"]["functional"]["missing_selectors"])
+        headset = next(item for item in model["acceptance"]["components"] if item["id"] == "headset")
+        self.assertEqual(headset["layers"]["functional"]["status"], "NOT_RUN")
+        self.assertIn("audio/headset-playback", headset["layers"]["functional"]["missing_selectors"])
         self.assertEqual(
             {item["file"] for item in model["evidence"]},
             {"results.tsv", "validator.log", "environment.tsv", "state-before.tsv", "state-after.tsv"},

@@ -1,3 +1,19 @@
+yogabook-validator (0.32.0) unstable; urgency=medium
+
+  * Add a conditional wired-headset workflow for headphone-only playback,
+    headset microphone signal quality, jack removal/reinsertion and buttons.
+  * Refuse to open a PCM unless both four-pole jack sensors are active, verify
+    that speakers remain muted, and require the guided event cycle to finish
+    with the headset reinserted.
+  * Restore the original UCM desktop route through a silent transport probe,
+    support original speaker or headphone profiles, and cover the event state
+    machine with synthetic tests.
+  * Keep the guided headset interaction out of automated validation while
+    exposing it directly and in the sequential Audio/Media category.
+  * Replace the final three UNIMPLEMENTED selectors with runnable evidence.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 04:23:41 +0200
+
 yogabook-validator (0.31.0) unstable; urgency=medium
 
   * Validate LTE registration and packet transport through an existing

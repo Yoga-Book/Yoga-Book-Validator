@@ -32,6 +32,7 @@ ACTIVE_COMMANDS = {
     "camera",
     "category",
     "haptics",
+    "headset",
     "inputs",
     "lights",
     "modes",
@@ -165,8 +166,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ),
             "Audio and media": (
                 "audio-media",
-                "Run display, camera, light and audio checks?",
-                "The checks run sequentially. Camera routes, lights and audio state are restored after each test; a quiet speaker tone is audible.",
+                "Run display, camera, light, audio and headset checks?",
+                "The checks run sequentially. Camera routes, lights and audio state are restored after each test; quiet speaker and headphone tones are audible. A connected four-pole headset requires one guided unplug, reinsert and button cycle.",
             ),
             "Input and device modes": (
                 "input-modes",
@@ -200,7 +201,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 "Start here for a complete or non-invasive health assessment.",
                 [
                     ("Complete device acceptance", "Combine deep passive diagnostics and physical observations in one report", self.on_full, True),
-                    ("Run automated suite", "All transport checks except suspend, with one authorization", self.on_automated, False),
+                    ("Run automated suite", "All non-guided transport checks except suspend, with one authorization", self.on_automated, False),
                     ("Run full passive suite", "All deep read-only checks in one merged report", self.on_passive, False),
                     ("Run passive audit", "Fast read-only checks; no administrator access", self.on_audit, False),
                 ],
@@ -210,6 +211,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 "Sound, cameras, display transport and visible hardware controls.",
                 [
                     ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
+                    ("Test wired headset", "Validate headphone output, headset microphone, jack transitions, and one media button", self.on_headset, False),
                     ("Test cameras", "Analyze both sensors and exercise one rear-focus step", self.on_camera, False),
                     ("Inspect display", "Validate i915, DSI, Micro-HDMI video/audio, and desktop policy", self.on_display, False),
                     ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
@@ -439,7 +441,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_automated(self, _button) -> None:
         self.confirm(
             "Run the automated hardware suite?",
-            "The suite runs passive, platform, display, sensor, power, USB, LTE, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
+            "The suite runs passive, platform, display, sensor, power, USB, LTE, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Guided headset and suspend tests are not included. Administrator authorization is required.",
             lambda: self.run_command("automated", ["--yes"]),
         )
 
@@ -462,6 +464,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Run active audio test?",
             "Desktop audio is paused temporarily. The test plays a quiet one-second tone, records three seconds from Mic1, then restores the previous ALSA and PipeWire state. Administrator authorization is required.",
             lambda: self.run_command("audio", ["--yes"]),
+        )
+
+    def on_headset(self, _button) -> None:
+        self.confirm(
+            "Test a connected wired headset?",
+            "Connect a four-pole headset first. The validator keeps speakers muted, plays one quiet one-second tone through the headphones, records three seconds from the headset microphone, then asks you to unplug, reinsert and press one headset button. It restores the original ALSA and desktop-audio state.",
+            lambda: self.run_command("headset", ["--yes", "--timeout", "90"]),
         )
 
     def on_suspend(self, _button) -> None:
@@ -719,7 +728,26 @@ class ValidatorWindow(Adw.ApplicationWindow):
         was_active = bool(matches and matches[-1] == len(self.active_subtests) - 1)
         if matches:
             self.active_subtests.pop(matches[-1])
-        self.set_row_result(button, 0 if status == "PASS" else 1, False)
+        if status == "SKIP":
+            spinner = self.row_spinners[button]
+            icon = self.row_status_icons[button]
+            spinner.stop()
+            spinner.set_visible(False)
+            icon.set_from_icon_name("media-playback-pause-symbolic")
+            icon.set_tooltip_text("Skipped or not applicable")
+            icon.add_css_class("dim-label")
+            icon.set_visible(True)
+        elif status == "WARN":
+            spinner = self.row_spinners[button]
+            icon = self.row_status_icons[button]
+            spinner.stop()
+            spinner.set_visible(False)
+            icon.set_from_icon_name("dialog-warning-symbolic")
+            icon.set_tooltip_text("Completed with warnings")
+            icon.add_css_class("dim-label")
+            icon.set_visible(True)
+        else:
+            self.set_row_result(button, 0 if status == "PASS" else 1, False)
         if was_active and self.active_subtests:
             self.set_row_running(self.active_subtests[-1][1])
 

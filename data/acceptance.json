@@ -1,10 +1,6 @@
 {
   "schema": "org.yogabook.validator.acceptance/v1",
-  "unimplemented_selectors": [
-    "audio/headset-playback",
-    "audio/headset-capture",
-    "input/headset-events"
-  ],
+  "unimplemented_selectors": [],
   "components": [
     {
       "id": "boot-kernel",

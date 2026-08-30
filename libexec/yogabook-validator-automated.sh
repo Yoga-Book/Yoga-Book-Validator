@@ -40,18 +40,22 @@ run_as_desktop() {
 run_subtest() {
 	local test_name=$1
 	shift
-	local report_dir="$suite_root/$test_name" rc=0 result=FAIL failures=0 warnings=0
+	local report_dir="$suite_root/$test_name" rc=0 result=FAIL failures=0 warnings=0 applicable=0 skipped=0
 	printf '\n===== Running %s =====\n' "$test_name" | tee -a "$YBV_LOG"
 	"$@" --output "$report_dir" || rc=$?
 	if [[ -s $report_dir/results.tsv && -s $report_dir/validator.log ]]; then
 		tail -n +2 "$report_dir/results.tsv" >>"$YBV_REPORT"
 		failures=$(awk -F '\t' 'NR > 1 && $4 == "FAIL" {count++} END {print count+0}' "$report_dir/results.tsv")
 		warnings=$(awk -F '\t' 'NR > 1 && $4 == "WARN" {count++} END {print count+0}' "$report_dir/results.tsv")
+		skipped=$(awk -F '\t' 'NR > 1 && $4 == "SKIP" {count++} END {print count+0}' "$report_dir/results.tsv")
+		applicable=$(awk -F '\t' 'NR > 1 && $2 != "validator" && $4 != "SKIP" && $4 != "INFO" {count++} END {print count+0}' "$report_dir/results.tsv")
 		YBV_FAILURES=$((YBV_FAILURES + failures))
 		YBV_WARNINGS=$((YBV_WARNINGS + warnings))
 		result=$(sed -n 's/^AUTOMATED_RESULT: //p' "$report_dir/validator.log" | tail -n 1)
 	fi
-	if ((rc == 0)) && [[ $result == PASS ]]; then
+	if ((rc == 0)) && [[ $result == PASS ]] && ((applicable == 0)); then
+		ybv_emit suite "$test_name" SKIP "$test_name validation was not applicable" "skipped=$skipped"
+	elif ((rc == 0)) && [[ $result == PASS ]]; then
 		ybv_emit suite "$test_name" PASS "$test_name validation completed" "failures=$failures warnings=$warnings"
 	else
 		ybv_emit suite "$test_name" FAIL "$test_name validation failed" "exit=$rc result=${result:-missing} failures=$failures warnings=$warnings"
