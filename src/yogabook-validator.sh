@@ -21,6 +21,7 @@ Commands:
   category NAME          Run one compatible validation category as a merged suite
   audio                  Run state-safe audio transport and signal tests
   camera                 Stream three frames from both cameras and restore route
+  controls               Observe Power, Volume and lid events without actions
   display                Inspect i915, DSI, Mutter and desktop display policy
   haptics                Pulse both Halo haptic actuators for 150 ms
   headset                Validate wired-headset audio, jack and button events
@@ -65,7 +66,7 @@ report)
 	[[ $# -eq 1 ]] || { echo 'Usage: yogabook-validator report DIRECTORY' >&2; exit 2; }
 	exec python3 "$LIBEXEC_DIR/yogabook-validator-report.py" --print-summary "$1"
 	;;
-audio | automated | camera | category | haptics | headset | inputs | lights | modes | quiet | rotation | storage | storage-write | suspend | wireless)
+audio | automated | camera | category | controls | haptics | headset | inputs | lights | modes | quiet | rotation | storage | storage-write | suspend | wireless)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then

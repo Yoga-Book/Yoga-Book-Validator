@@ -21,6 +21,8 @@ required=(
 	libexec/yogabook-validator-active.sh libexec/yogabook-validator-automated.sh
 	libexec/yogabook-validator-camera.sh
 	libexec/yogabook-validator-camera-capture.py
+	libexec/yogabook-validator-controls-events.py
+	libexec/yogabook-validator-controls.sh
 	libexec/yogabook-validator-display.sh
 	libexec/yogabook-validator-hdmi-link.py
 	libexec/yogabook-validator-headset-events.py
@@ -39,6 +41,7 @@ required=(
 	libexec/yogabook-validator-usb.sh libexec/yogabook-validator-wireless.sh
 	libexec/yogabook-validator-physical.sh libexec/yogabook-validator-full.sh
 	libexec/yogabook-validator-bundle.sh ui/yogabook_validator_ui.py
+	tests/test-controls-events.py
 	data/org.yogabook.Validator.desktop data/org.yogabook.validator.policy
 	data/metainfo/org.yogabook.Validator.metainfo.xml debian/control debian/rules
 	debian/yogabook-validator.links
@@ -52,7 +55,7 @@ done < <(
 	printf '%s\n' "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 )
 test -x "$root/ui/yogabook_validator_ui.py"
-for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-quiet.sh yogabook-validator-stability.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+for private_helper in yogabook-validator-automated.sh yogabook-validator-controls.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-quiet.sh yogabook-validator-stability.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
 	set +e
 	"$root/libexec/$private_helper" >/dev/null 2>&1
 	helper_rc=$?
@@ -79,6 +82,7 @@ python3 "$root/tests/test-report.py"
 python3 "$root/tests/test-dossier.py"
 python3 "$root/tests/test-hdmi-link.py"
 python3 "$root/tests/test-headset-events.py"
+python3 "$root/tests/test-controls-events.py"
 python3 "$root/tests/test-modem.py"
 "$root/tests/test-audio-levels.sh"
 python3 - "$root/data/acceptance.json" "$root/docs/coverage.md" "$root/ui/yogabook_validator_ui.py" <<'PY'
@@ -394,7 +398,7 @@ if grep -RqF 'chown -R -- "$real_user:' "$root/libexec"; then
 	echo 'report ownership must use the explicit primary group helper' >&2
 	exit 1
 fi
-for report_writer in yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+for report_writer in yogabook-validator-controls.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
 	# shellcheck disable=SC2016
 	grep -Fq 'ybv_finish_report_for_user "$real_user"' "$root/libexec/$report_writer"
 done
@@ -435,6 +439,7 @@ grep -Fq 'run_subtest automated' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest resources' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest headset' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'run_subtest controls' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest modem' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest modem' "$root/libexec/yogabook-validator-automated.sh"
 grep -Fq "cget name='Headphone Jack'" "$root/libexec/yogabook-validator-active.sh"
@@ -545,16 +550,26 @@ if grep -Fq 'run_subtest headset' "$root/libexec/yogabook-validator-automated.sh
 	echo 'guided headset validation must not be part of automated' >&2
 	exit 1
 fi
+if grep -Fq 'run_subtest controls' "$root/libexec/yogabook-validator-automated.sh"; then
+	echo 'guided control event validation must not be part of automated' >&2
+	exit 1
+fi
 for quiet_check in check platform resources display sensors power usb modem gnss camera inputs storage wireless lights; do
 	grep -Fq "run_subtest $quiet_check" "$root/libexec/yogabook-validator-quiet.sh"
 done
-if grep -Eq 'run_subtest (audio|headset|haptics|suspend|modes|rotation)([[:space:]]|$)' "$root/libexec/yogabook-validator-quiet.sh"; then
+if grep -Eq 'run_subtest (audio|controls|headset|haptics|suspend|modes|rotation)([[:space:]]|$)' "$root/libexec/yogabook-validator-quiet.sh"; then
 	echo 'quiet diagnostics must not schedule audible, haptic, suspend or guided checks' >&2
 	exit 1
 fi
 grep -Fq "quiet-policy PASS 'Quiet diagnostics excluded audible, haptic, suspend and guided workflows'" "$root/libexec/yogabook-validator-quiet.sh"
 grep -Fq 'services-final-state PASS' "$root/libexec/yogabook-validator-quiet.sh"
 grep -Fq 'rotation               Verify all four automatic display orientations' "$root/src/yogabook-validator.sh"
+grep -Fq 'controls               Observe Power, Volume and lid events without actions' "$root/src/yogabook-validator.sh"
+grep -Fq 'self.run_command("controls", ["--yes", "--timeout", "90"])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'device.grab()' "$root/libexec/yogabook-validator-controls-events.py"
+grep -Fq 'device.ungrab()' "$root/libexec/yogabook-validator-controls-events.py"
+grep -Fq 'finally:' "$root/libexec/yogabook-validator-controls-events.py"
+grep -Fq 'controls-release' "$root/libexec/yogabook-validator-controls.sh"
 grep -Fq 'if clean.startswith("ACTION_REQUIRED:")' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"
 grep -Fq 'charge_full_design' "$root/libexec/yogabook-validator-power.sh"

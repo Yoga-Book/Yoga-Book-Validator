@@ -42,7 +42,7 @@ card, the pen-mode transition and an outdoor GNSS fix.
 | Battery and charging | BQ27542/BQ25892 identity and UPower consistency | `power` validates live electrical, thermal and charge counters | Cable events and sustained charging are observed |
 | Thermals and resources | thermald policy, critical limits and cgroup limits | `resources` samples temperature, CPU, memory, tasks and restarts | No unsafe heat, throttling or instability under representative use |
 | Suspend/resume | RTC wake and s2idle plumbing | `suspend` keeps hardware-muted full-duplex transport alive without xruns | Display, input, radios and audio work after resume |
-| Lid and hardware buttons | Input devices and switch/key capabilities | Event behavior is recorded through guided physical acceptance | Lid, power and volume actions match their intended desktop behavior |
+| Lid and hardware buttons | Input devices and switch/key capabilities | `controls` observes Power, Volume Up/Down and lid close/reopen while suppressing desktop actions, then releases every grab | Lid, power and volume actions match their intended desktop behavior |
 | Indicator and charging LEDs | LED controls and trigger policy | `lights` performs one-step changes and exact cleanup | Visible charging/indicator behavior matches cable and system state |
 | Reboot and poweroff | No failed units or fatal current-boot journal events | Reboot returns to the pinned kernel; poweroff terminates cleanly | At least one physical reboot and one full shutdown are observed |
 

@@ -1,3 +1,13 @@
+yogabook-validator (0.45.0) unstable; urgency=medium
+
+  * Add a guided Power, Volume Up/Down and lid close/reopen event workflow.
+  * Exclusively grab only the GPIO button and lid devices while testing so
+    desktop power actions are suppressed, then verify every grab is released.
+  * Separate structural capabilities, functional events and physical control
+    observations in the acceptance matrix and expose the workflow in the UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 18:00:00 +0200
+
 yogabook-validator (0.44.0) unstable; urgency=medium
 
   * Treat rfkill policy as authoritative while Bluetooth is blocked, avoiding

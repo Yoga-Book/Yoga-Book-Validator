@@ -31,6 +31,7 @@ ACTIVE_COMMANDS = {
     "automated",
     "camera",
     "category",
+    "controls",
     "haptics",
     "headset",
     "inputs",
@@ -234,7 +235,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Input and device modes": (
                 "input-modes",
                 "Run all input and mode checks?",
-                "This interactive sequence inspects capabilities, pulses both haptics, then asks you to switch between keyboard and pen modes and rotate through all four orientations.",
+                "This interactive sequence inspects capabilities, safely observes Power, Volume and lid events, pulses both haptics, then asks you to switch between keyboard and pen modes and rotate through all four orientations.",
             ),
             "Platform and power": (
                 "platform-power",
@@ -286,6 +287,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 "Halo keyboard, touch, pen, haptics and orientation transitions.",
                 [
                     ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
+                    ("Test buttons and lid", "Observe Power, Volume and lid events while suppressing system actions", self.on_controls, False),
                     ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
                     ("Test keyboard/pen modes", "Observe one physical keyboard to pen to keyboard transition", self.on_modes, False),
                     ("Test automatic rotation", "Verify all four sensor orientations and return upright", self.on_rotation, False),
@@ -587,6 +589,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Inspect input capabilities?",
             "The validator opens each kernel input node read-only to inspect its capability map. It does not grab devices, monitor events, record keys or touches, or inject input. Administrator authorization is required.",
             lambda: self.run_command("inputs", ["--yes"]),
+        )
+
+    def on_controls(self, _button) -> None:
+        self.confirm(
+            "Test Power, Volume and lid events?",
+            "The validator temporarily grabs only the two GPIO button devices and lid switch, preventing desktop power or suspend actions. Press Power, Volume Up and Volume Down once, then close and reopen the lid. Every grab is released even on timeout or cancellation. Administrator authorization is required.",
+            lambda: self.run_command("controls", ["--yes", "--timeout", "90"]),
         )
 
     def on_modes(self, _button) -> None:

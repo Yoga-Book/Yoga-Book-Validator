@@ -83,6 +83,7 @@ audio-media)
 	;;
 input-modes)
 	run_subtest inputs "$LIBEXEC_DIR/yogabook-validator-active.sh" inputs --yes
+	run_subtest controls "$LIBEXEC_DIR/yogabook-validator-active.sh" controls --yes --timeout 90
 	run_subtest haptics "$LIBEXEC_DIR/yogabook-validator-active.sh" haptics --yes
 	run_subtest modes "$LIBEXEC_DIR/yogabook-validator-active.sh" modes --yes
 	run_subtest rotation "$LIBEXEC_DIR/yogabook-validator-active.sh" rotation --yes

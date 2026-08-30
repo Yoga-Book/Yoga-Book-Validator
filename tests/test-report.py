@@ -152,8 +152,24 @@ class ReportRendererTest(unittest.TestCase):
 
         with (self.report / "results.tsv").open("a", encoding="utf-8") as stream:
             stream.write(
-                "2026-08-29T10:00:06+02:00\tphysical\thardware-buttons\tPASS\tButtons observed\t\n"
-                "2026-08-29T10:00:06+02:00\tphysical\tlid-switch\tPASS\tLid observed\t\n"
+                "2026-08-29T10:00:06+02:00\tinput\tpower-button-event\tPASS\tPower observed\t\n"
+                "2026-08-29T10:00:06+02:00\tinput\tvolume-up-event\tPASS\tVolume up observed\t\n"
+                "2026-08-29T10:00:06+02:00\tinput\tvolume-down-event\tPASS\tVolume down observed\t\n"
+                "2026-08-29T10:00:06+02:00\tinput\tlid-close-event\tPASS\tLid close observed\t\n"
+                "2026-08-29T10:00:06+02:00\tinput\tlid-open-event\tPASS\tLid open observed\t\n"
+                "2026-08-29T10:00:06+02:00\tinput\tcontrols-release\tPASS\tGrabs released\t\n"
+            )
+        subprocess.run([sys.executable, str(RENDERER), str(self.report)], check=True)
+        model = json.loads((self.report / "report.json").read_text(encoding="utf-8"))
+        buttons = next(item for item in model["acceptance"]["components"] if item["id"] == "buttons-lid")
+        self.assertEqual(buttons["status"], "NOT_RUN")
+        self.assertEqual(buttons["layers"]["functional"]["status"], "PASS")
+        self.assertEqual(model["acceptance"]["summary"]["layers"]["functional"]["components_complete"], 1)
+
+        with (self.report / "results.tsv").open("a", encoding="utf-8") as stream:
+            stream.write(
+                "2026-08-29T10:00:07+02:00\tphysical\thardware-buttons\tPASS\tButtons observed\t\n"
+                "2026-08-29T10:00:07+02:00\tphysical\tlid-switch\tPASS\tLid observed\t\n"
             )
         subprocess.run([sys.executable, str(RENDERER), str(self.report)], check=True)
         model = json.loads((self.report / "report.json").read_text(encoding="utf-8"))

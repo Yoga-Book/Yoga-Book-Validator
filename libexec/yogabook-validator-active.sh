@@ -42,7 +42,7 @@ while (($#)); do
 		[[ $# -ge 2 ]] || { echo 'ERROR: --seconds requires a value' >&2; exit 2; }
 		suspend_seconds=$2; shift 2 ;;
 	--timeout)
-		[[ $action == modes || $action == rotation || $action == headset ]] || { echo 'ERROR: --timeout is valid only for modes, rotation or headset' >&2; exit 2; }
+		[[ $action == controls || $action == modes || $action == rotation || $action == headset ]] || { echo 'ERROR: --timeout is valid only for controls, modes, rotation or headset' >&2; exit 2; }
 		[[ $# -ge 2 ]] || { echo 'ERROR: --timeout requires a value' >&2; exit 2; }
 		mode_timeout=$2; shift 2 ;;
 	*)
@@ -52,7 +52,7 @@ while (($#)); do
 	esac
 done
 [[ $suspend_seconds =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: suspend duration must be a positive integer' >&2; exit 2; }
-[[ $mode_timeout =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: mode transition timeout must be a positive integer' >&2; exit 2; }
+[[ $mode_timeout =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: guided test timeout must be a positive integer' >&2; exit 2; }
 
 case $action in
 audio)
@@ -70,7 +70,7 @@ category)
 	audio-media)
 		prompt='This category runs display inspection, both camera captures, reversible light checks, internal audio and a conditional wired-headset test in a safe sequence.' ;;
 	input-modes)
-		prompt='This interactive category inspects input capabilities, pulses both haptics, then guides you through keyboard, pen, and all four display orientations.' ;;
+		prompt='This interactive category inspects input capabilities, safely observes Power, Volume and lid events, pulses both haptics, then guides you through keyboard, pen, and all four display orientations.' ;;
 	platform-power)
 		prompt='This category runs the read-only platform, resource, power, thermal, and sensor checks as one report.' ;;
 	connectivity-storage)
@@ -81,6 +81,8 @@ category)
 	esac ;;
 camera)
 	prompt='This test pauses the desktop camera processor, captures three private AtomISP frames from each sensor, checks rear focus, then restores the original route and processor state.' ;;
+controls)
+	prompt="This guided test temporarily suppresses system actions from the Yoga Book Power, Volume and lid devices while you press each button and close then reopen the lid within ${mode_timeout} seconds. Every exclusive input grab is released before reporting." ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
 headset)
@@ -114,7 +116,7 @@ if [[ $assume_yes != true ]]; then
 fi
 
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
-if [[ $action == haptics || $action == inputs || $action == modes || $action == rotation ]]; then
+if [[ $action == controls || $action == haptics || $action == inputs || $action == modes || $action == rotation ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
 elif [[ $action == automated || $action == camera || $action == category || $action == lights || $action == quiet || $action == storage || $action == storage-write || $action == wireless ]]; then
 	:
@@ -203,9 +205,9 @@ if [[ $action == camera ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-camera.sh" --yes --output "$output_dir"
 fi
 
-if [[ $action == inputs || $action == lights || $action == modes || $action == rotation || $action == storage || $action == storage-write || $action == wireless ]]; then
+if [[ $action == controls || $action == inputs || $action == lights || $action == modes || $action == rotation || $action == storage || $action == storage-write || $action == wireless ]]; then
 	active_args=(--output "$output_dir")
-	[[ $action == modes || $action == rotation ]] && active_args+=(--timeout "$mode_timeout")
+	[[ $action == controls || $action == modes || $action == rotation ]] && active_args+=(--timeout "$mode_timeout")
 	if [[ $action == rotation ]]; then
 		exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-modes.sh" --all-orientations "${active_args[@]}"
 	fi

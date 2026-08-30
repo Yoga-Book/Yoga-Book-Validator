@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.44.0_all.deb
+sudo apt install ../yogabook-validator_0.45.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -75,6 +75,7 @@ yogabook-validator dossier REPORT_DIRECTORY... --output DOSSIER_DIRECTORY
 yogabook-validator haptics
 yogabook-validator headset
 yogabook-validator inputs
+yogabook-validator controls
 yogabook-validator lights
 yogabook-validator modem
 yogabook-validator modes
@@ -194,6 +195,15 @@ The input-capability test opens event nodes read-only and validates the key,
 switch, absolute-axis and force-feedback features exposed by the kernel. It
 does not grab devices, monitor events, record user input or inject events.
 
+The guided controls test verifies behavior beyond static capability maps. It
+opens only the two GPIO button devices and the lid switch, applies exclusive
+input grabs so Power and lid events cannot trigger desktop actions, then asks
+for one Power press, both Volume presses and one lid close/reopen cycle. A
+`finally` cleanup releases every grab on success, timeout or error; closing the
+process also makes the kernel release all file-descriptor-owned grabs. The
+report keeps these functional events separate from the operator's physical
+assessment of the resulting controls.
+
 The mode-cycle test starts in Halo keyboard mode and waits for the user to
 switch physically to drawing/pen mode and back. It verifies Wacom position,
 pressure, tool and touch capabilities, the libinput calibration matrix, Halo
@@ -311,7 +321,9 @@ sound. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `headset` validates a connected four-pole
 headset's isolated playback, microphone signal and removal/reinsertion/button
 events. `inputs` audits kernel capability maps without
-reading events. `modes` observes one physical Halo keyboard to Wacom pen to
+reading events. `controls` suppresses desktop actions while observing one
+Power, Volume Up, Volume Down and lid close/reopen cycle. `modes` observes one
+physical Halo keyboard to Wacom pen to
 Halo keyboard cycle and accepts `--timeout SECONDS`. `rotation` extends that
 cycle and requires all four sensor orientations to match stable Mutter
 transforms before returning upright. `storage` validates an
