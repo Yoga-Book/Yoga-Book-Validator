@@ -36,6 +36,7 @@ ACTIVE_COMMANDS = {
     "inputs",
     "lights",
     "modes",
+    "quiet",
     "rotation",
     "storage",
     "storage-write",
@@ -202,6 +203,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 [
                     ("Complete device acceptance", "Combine deep passive diagnostics and physical observations in one report", self.on_full, True),
                     ("Run automated suite", "All non-guided transport checks except suspend, with one authorization", self.on_automated, False),
+                    ("Run quiet diagnostics", "All automated checks that do not play, record, vibrate, suspend, or require guidance", self.on_quiet, False),
                     ("Run full passive suite", "All deep read-only checks in one merged report", self.on_passive, False),
                     ("Run passive audit", "Fast read-only checks; no administrator access", self.on_audit, False),
                 ],
@@ -443,6 +445,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Run the automated hardware suite?",
             "The suite runs passive, platform, display, sensor, power, USB, LTE, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Guided headset and suspend tests are not included. Administrator authorization is required.",
             lambda: self.run_command("automated", ["--yes"]),
+        )
+
+    def on_quiet(self, _button) -> None:
+        self.confirm(
+            "Run quiet hardware diagnostics?",
+            "This suite validates platform, display, sensors, power, USB, LTE, GNSS, cameras, input capabilities, storage, Wi-Fi, Bluetooth and lights. It does not play or record audio, vibrate haptics, suspend the tablet, or request guided actions. Every state-changing check restores its original state.",
+            lambda: self.run_command("quiet", ["--yes"]),
         )
 
     def on_category(self, category: str, heading: str, body: str) -> None:

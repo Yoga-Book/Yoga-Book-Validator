@@ -29,6 +29,7 @@ required=(
 	libexec/yogabook-validator-modes.sh
 	libexec/yogabook-validator-passive.sh
 	libexec/yogabook-validator-platform.sh
+	libexec/yogabook-validator-quiet.sh
 	libexec/yogabook-validator-resources.sh
 	libexec/yogabook-validator-stability.sh
 	libexec/yogabook-validator-power.sh libexec/yogabook-validator-sensors.sh
@@ -49,7 +50,7 @@ done < <(
 	printf '%s\n' "$root"/src/*.sh "$root"/libexec/*.sh "$root"/tests/*.sh "$root"/debian/tests/*.sh
 )
 test -x "$root/ui/yogabook_validator_ui.py"
-for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-stability.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
+for private_helper in yogabook-validator-automated.sh yogabook-validator-inputs.sh yogabook-validator-lights.sh yogabook-validator-modes.sh yogabook-validator-quiet.sh yogabook-validator-stability.sh yogabook-validator-storage.sh yogabook-validator-wireless.sh; do
 	set +e
 	"$root/libexec/$private_helper" >/dev/null 2>&1
 	helper_rc=$?
@@ -277,6 +278,7 @@ grep -Fq 'self.run_command("passive", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("resources", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("modem", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("headset", ["--yes", "--timeout", "90"])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.run_command("quiet", ["--yes"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
@@ -380,6 +382,7 @@ grep -Fq 'category NAME          Run one compatible validation category as a mer
 grep -Fq 'report.html' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-report.py' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq 'report DIRECTORY' "$root/src/yogabook-validator.sh"
+grep -Fq 'quiet                  Run all non-audible, non-haptic automated diagnostics' "$root/src/yogabook-validator.sh"
 grep -Fq 'self.run_streaming_command(argv, output)' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'GLib.idle_add(self.append_console, line)' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'subtest_start = re.match(r"^===== Running ([a-z0-9-]+) =====$", clean)' "$root/ui/yogabook_validator_ui.py"
@@ -407,7 +410,6 @@ for restoring_runner in active camera lights storage wireless; do
 	grep -Fq 'ybv_register_restore_callback' "$root/libexec/yogabook-validator-$restoring_runner.sh"
 done
 for bounded_bluetooth_command in \
-	'timeout 5 btmgmt --index "$controller_index" info' \
 	'timeout 5 btmgmt --index "$controller_index" stop-find' \
 	'timeout 5 bluetoothctl show'; do
 	grep -Fq "$bounded_bluetooth_command" "$root/libexec/yogabook-validator-wireless.sh"
@@ -460,6 +462,15 @@ if grep -Fq 'run_subtest headset' "$root/libexec/yogabook-validator-automated.sh
 	echo 'guided headset validation must not be part of automated' >&2
 	exit 1
 fi
+for quiet_check in check platform resources display sensors power usb modem gnss camera inputs storage wireless lights; do
+	grep -Fq "run_subtest $quiet_check" "$root/libexec/yogabook-validator-quiet.sh"
+done
+if grep -Eq 'run_subtest (audio|headset|haptics|suspend|modes|rotation)([[:space:]]|$)' "$root/libexec/yogabook-validator-quiet.sh"; then
+	echo 'quiet diagnostics must not schedule audible, haptic, suspend or guided checks' >&2
+	exit 1
+fi
+grep -Fq "quiet-policy PASS 'Quiet diagnostics excluded audible, haptic, suspend and guided workflows'" "$root/libexec/yogabook-validator-quiet.sh"
+grep -Fq 'services-final-state PASS' "$root/libexec/yogabook-validator-quiet.sh"
 grep -Fq 'rotation               Verify all four automatic display orientations' "$root/src/yogabook-validator.sh"
 grep -Fq 'if clean.startswith("ACTION_REQUIRED:")' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'ecodes.SW_HEADPHONE_INSERT' "$root/libexec/yogabook-validator-inputs.sh"
@@ -504,9 +515,30 @@ if grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-automa
 	exit 1
 fi
 grep -Fq 'restore_wireless || true' "$root/libexec/yogabook-validator-wireless.sh"
-grep -Fq 'required_settings=(powered connectable discoverable bondable ssp br/edr le advertising secure-conn privacy phy-configuration)' "$root/libexec/yogabook-validator-wireless.sh"
-grep -Fq "grep -c ' dev_found:'" "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'timeout 8 bluetoothctl show' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'missing_capabilities+=(classic-audio)' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'missing_capabilities+=(low-energy-gatt)' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'missing_capabilities+=(central-role)' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'missing_capabilities+=(peripheral-role)' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'missing_capabilities+=(advertising)' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq "grep -Ec '\\] Device '" "$root/libexec/yogabook-validator-wireless.sh"
 grep -Fq 'identities=discarded' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'stdbuf -oL -eL bluetoothctl --timeout 8 scan on' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq "grep -Fq 'Discovering: yes'" "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'mktemp /tmp/yogabook-validator-bluetooth.XXXXXX' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'controller_info=$(timeout 8 bluetoothctl show' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'initial_power_known=false' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'No Bluetooth state was changed after the incomplete initial snapshot' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'rm -f -- "$discovery_file"' "$root/libexec/yogabook-validator-wireless.sh"
+grep -Fq 'state=$(timeout 5 bluetoothctl show' "$root/libexec/yogabook-validator-common.sh"
+if grep -Fq 'btmgmt info' "$root/libexec/yogabook-validator-common.sh"; then
+	echo 'global state snapshots must not invoke the mutating MGMT inventory path' >&2
+	exit 1
+fi
+for suite_runner in automated quiet; do
+	grep -Fq 'critical_services=(halo-keyboard.service yogabook-camera.service iio-sensor-proxy.service bluetooth.service ModemManager.service)' \
+		"$root/libexec/yogabook-validator-$suite_runner.sh"
+done
 # shellcheck disable=SC2016
 if grep -Fq 'discovery_output" >>"$YBV_LOG"' "$root/libexec/yogabook-validator-wireless.sh"; then
 	echo 'raw Bluetooth discovery output must not be written to reports or logs' >&2

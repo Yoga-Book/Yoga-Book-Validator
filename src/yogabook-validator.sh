@@ -31,6 +31,7 @@ Commands:
   rotation               Verify all four automatic display orientations
   platform               Inspect SoC, CPU, thermal, eMMC and RTC health
   power                  Validate battery, charger and desktop telemetry
+  quiet                  Run all non-audible, non-haptic automated diagnostics
   resources              Profile Yoga Book services and thermal safeguards
   sensors                Sample every Yoga Book IIO sensor channel
   stability ACTION       Track operator-confirmed cold-boot validation
@@ -63,7 +64,7 @@ report)
 	[[ $# -eq 1 ]] || { echo 'Usage: yogabook-validator report DIRECTORY' >&2; exit 2; }
 	exec python3 "$LIBEXEC_DIR/yogabook-validator-report.py" --print-summary "$1"
 	;;
-audio | automated | camera | category | haptics | headset | inputs | lights | modes | rotation | storage | storage-write | suspend | wireless)
+audio | automated | camera | category | haptics | headset | inputs | lights | modes | quiet | rotation | storage | storage-write | suspend | wireless)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then

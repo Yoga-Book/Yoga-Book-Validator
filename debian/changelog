@@ -1,3 +1,21 @@
+yogabook-validator (0.33.0) unstable; urgency=medium
+
+  * Add cancellable quiet diagnostics covering every automated camera, input,
+    light, radio, storage and read-only subsystem check that produces no sound.
+  * Exclude playback, capture, headset, haptics, suspend and guided workflows
+    by construction, while preserving each subtest's state-restoration guard.
+  * Report all-SKIP subtests as neutral, not successful, and verify critical
+    integration services after the complete quiet sequence.
+  * Fix Bluetooth discovery under non-interactive output with a line-buffered
+    asynchronous scan, authoritative Discovering-state polling and final-state
+    restoration retries; use non-blocking BlueZ capability inventory, discard
+    the temporary identity-bearing scan output and fail closed if the initial
+    controller power state cannot be captured.
+  * Make global state snapshots observe Bluetooth through non-mutating BlueZ
+    properties instead of a blocking MGMT query that could toggle rfkill.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 04:47:55 +0200
+
 yogabook-validator (0.32.0) unstable; urgency=medium
 
   * Add a conditional wired-headset workflow for headphone-only playback,

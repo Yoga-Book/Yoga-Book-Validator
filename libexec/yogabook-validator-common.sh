@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.32.0
+YBV_VERSION=0.33.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -180,8 +180,17 @@ ybv_capture_state_snapshot() {
 						}
 					' || true
 			fi
-			if command -v btmgmt >/dev/null 2>&1; then
-				state=$(timeout 5 btmgmt info 2>/dev/null | sed -n 's/^[[:space:]]*current settings: /settings=/p' | head -n 1 || true)
+			if command -v bluetoothctl >/dev/null 2>&1; then
+				state=$(timeout 5 bluetoothctl show </dev/null 2>/dev/null |
+					awk '
+						/^[[:space:]]*(Powered|Discovering):/ {
+							name=$1
+							sub(/:$/, "", name)
+							printf "%s%s=%s", separator, tolower(name), $2
+							separator=" "
+						}
+						END { if (separator != "") print "" }
+					' || true)
 				[[ -z $state ]] || printf 'bluetooth:controller\t%s\n' "$state"
 			fi
 			if command -v findmnt >/dev/null 2>&1; then

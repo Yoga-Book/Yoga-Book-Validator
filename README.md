@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.32.0_all.deb
+sudo apt install ../yogabook-validator_0.33.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -80,6 +80,7 @@ yogabook-validator modes
 yogabook-validator rotation
 yogabook-validator platform
 yogabook-validator power
+yogabook-validator quiet
 yogabook-validator resources
 yogabook-validator sensors
 yogabook-validator stability start 3
@@ -237,6 +238,12 @@ a deterministic order, preserves every subreport and creates a merged
 evidence. Suspend remains opt-in, while the guided wired-headset workflow is a
 separate action and part of the Audio/Media category.
 
+`quiet` requests authorization once and runs the complete non-audible automated
+subset: passive diagnostics, cameras, input capability inspection, read-only SD
+validation, Wi-Fi/Bluetooth, reversible lights and service final-state checks.
+It excludes every playback, capture, headset, haptic, suspend and guided action
+by construction while retaining cancellation and per-subtest restoration.
+
 The LTE test never enables, connects or disconnects the modem. Without a SIM it
 records explicit conditional skips. With a SIM it requires an already
 registered modem and connected bearer, then sends three packets through that
@@ -305,7 +312,9 @@ accessories and targeted kernel errors. `modem` validates SIM registration and
 packet replies over an already-connected LTE bearer without changing modem or
 NetworkManager state. `wireless` checks the current Wi-Fi
 gateway, Bluetooth controller features and bounded RF discovery while
-restoring radio state. `suspend` keeps hardware-muted full-duplex audio active
+restoring radio state. `quiet` merges all non-audible automated diagnostics
+into one report without scheduling playback, capture, haptics or suspend.
+`suspend` keeps hardware-muted full-duplex audio active
 across one suspend and reports any recovered ALSA xruns. `gnss` accepts `--require-sky` or
 `--require-fix`. `physical` records PASS/FAIL/SKIP observations. `bundle`
 compresses an existing report directory while excluding sensitive artifacts.

@@ -89,6 +89,8 @@ lights)
 	prompt='This test makes one-step changes to panel and platform light brightness, then restores every brightness and trigger value.' ;;
 modes)
 	prompt='This test observes one physical Halo keyboard to Wacom pen to Halo keyboard mode cycle. It does not read or record input events.' ;;
+quiet)
+	prompt='This suite runs every non-audible automated diagnostic, including cameras, input capabilities, lights, radios and read-only storage. It excludes playback, capture, haptics, suspend and guided workflows.' ;;
 rotation)
 	prompt='This test observes a Halo-to-pen mode cycle while you rotate the tablet through all four cardinal orientations and return it upright. It does not change display policy or read input events.' ;;
 storage)
@@ -112,7 +114,7 @@ fi
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 if [[ $action == haptics || $action == inputs || $action == modes || $action == rotation ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
-elif [[ $action == automated || $action == camera || $action == category || $action == lights || $action == storage || $action == storage-write || $action == wireless ]]; then
+elif [[ $action == automated || $action == camera || $action == category || $action == lights || $action == quiet || $action == storage || $action == storage-write || $action == wireless ]]; then
 	:
 else
 	for required in alsactl alsaucm amixer aplay arecord pactl parec pw-play wpctl systemctl timeout python3; do
@@ -185,6 +187,10 @@ if [[ $action == automated ]]; then
 	automated_args=(--output "$output_dir")
 	[[ $include_suspend == true ]] && automated_args+=(--include-suspend)
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-automated.sh" "${automated_args[@]}"
+fi
+
+if [[ $action == quiet ]]; then
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-quiet.sh" --output "$output_dir"
 fi
 
 if [[ $action == category ]]; then

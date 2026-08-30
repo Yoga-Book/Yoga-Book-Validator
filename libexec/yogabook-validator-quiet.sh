@@ -7,29 +7,26 @@ LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$LIBEXEC_DIR/yogabook-validator-common.sh"
 
 [[ $EUID -eq 0 && ${YBV_ACTIVE_DISPATCH:-} == 1 ]] || {
-	echo 'ERROR: automated suite must be launched through yogabook-validator' >&2
+	echo 'ERROR: quiet diagnostics must be launched through yogabook-validator' >&2
 	exit 2
 }
 output_dir=
-include_suspend=false
 while (($#)); do
 	case $1 in
 	--output) [[ $# -ge 2 ]] || exit 2; output_dir=$2; shift 2 ;;
-	--include-suspend) include_suspend=true; shift ;;
 	*) echo "ERROR: unknown option: $1" >&2; exit 2 ;;
 	esac
 done
-ybv_require_x91l || { echo 'ERROR: automated suite is restricted to Lenovo YB1-X91L' >&2; exit 2; }
+ybv_require_x91l || { echo 'ERROR: quiet diagnostics are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 
 real_user=$(ybv_real_user)
 if [[ $real_user == root || -z $real_user ]] || ! id "$real_user" >/dev/null 2>&1; then
-	echo 'ERROR: automated suite requires an invoking desktop user' >&2
+	echo 'ERROR: quiet diagnostics require an invoking desktop user' >&2
 	exit 2
 fi
 
-ybv_begin_report automated "$output_dir"
+ybv_begin_report quiet "$output_dir"
 suite_root=$YBV_REPORT_DIR
-gnss_restarts_before=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
 
 # Passed by name to run_subtest and invoked indirectly.
 # shellcheck disable=SC2329
@@ -54,16 +51,17 @@ run_subtest() {
 		result=$(sed -n 's/^AUTOMATED_RESULT: //p' "$report_dir/validator.log" | tail -n 1)
 	fi
 	if ((rc == 0)) && [[ $result == PASS ]] && ((applicable == 0)); then
-		ybv_emit suite "$test_name" SKIP "$test_name validation was not applicable" "skipped=$skipped"
+		ybv_emit suite "$test_name" SKIP "$test_name quiet validation was not applicable" "skipped=$skipped"
 	elif ((rc == 0)) && [[ $result == PASS ]]; then
-		ybv_emit suite "$test_name" PASS "$test_name validation completed" "failures=$failures warnings=$warnings"
+		ybv_emit suite "$test_name" PASS "$test_name quiet validation completed" "failures=$failures warnings=$warnings"
 	else
-		ybv_emit suite "$test_name" FAIL "$test_name validation failed" "exit=$rc result=${result:-missing} failures=$failures warnings=$warnings"
+		ybv_emit suite "$test_name" FAIL "$test_name quiet validation failed" "exit=$rc result=${result:-missing} failures=$failures warnings=$warnings"
 	fi
 }
 
 run_subtest check run_as_desktop "$LIBEXEC_DIR/yogabook-validator-check.sh"
 run_subtest platform run_as_desktop "$LIBEXEC_DIR/yogabook-validator-platform.sh"
+run_subtest resources run_as_desktop "$LIBEXEC_DIR/yogabook-validator-resources.sh"
 run_subtest display run_as_desktop "$LIBEXEC_DIR/yogabook-validator-display.sh"
 run_subtest sensors run_as_desktop "$LIBEXEC_DIR/yogabook-validator-sensors.sh"
 run_subtest power run_as_desktop "$LIBEXEC_DIR/yogabook-validator-power.sh"
@@ -75,33 +73,8 @@ run_subtest inputs "$LIBEXEC_DIR/yogabook-validator-active.sh" inputs --yes
 run_subtest storage "$LIBEXEC_DIR/yogabook-validator-active.sh" storage --yes
 run_subtest wireless "$LIBEXEC_DIR/yogabook-validator-active.sh" wireless --yes
 run_subtest lights "$LIBEXEC_DIR/yogabook-validator-active.sh" lights --yes
-run_subtest haptics "$LIBEXEC_DIR/yogabook-validator-active.sh" haptics --yes
-run_subtest audio "$LIBEXEC_DIR/yogabook-validator-active.sh" audio --yes
-if [[ $include_suspend == true ]]; then
-	run_subtest suspend "$LIBEXEC_DIR/yogabook-validator-active.sh" suspend --yes --seconds 8
-else
-	ybv_emit suite suspend SKIP 'Suspend test was not requested; use --include-suspend to include it'
-fi
 
-gnss_restarts_after=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
-if systemctl is-active --quiet yogabook-gnss.service &&
-	[[ $gnss_restarts_before =~ ^[0-9]+$ && $gnss_restarts_after =~ ^[0-9]+$ ]]; then
-	if ((gnss_restarts_after == gnss_restarts_before)); then
-		ybv_emit suite gnss-final-state PASS 'GNSS remained active without restarting across the complete automated suite' "restarts=$gnss_restarts_after"
-	else
-		ybv_emit suite gnss-final-state FAIL 'GNSS restarted during the complete automated suite' "before=$gnss_restarts_before after=$gnss_restarts_after"
-	fi
-else
-	ybv_emit suite gnss-final-state FAIL 'GNSS final service state or restart counter is unavailable' "before=${gnss_restarts_before:-missing} after=${gnss_restarts_after:-missing}"
-fi
-
-desktop_graph=$(run_as_desktop timeout 5 wpctl status 2>/dev/null || true)
-if grep -Fq 'Built-in Audio Stereo Speakers' <<<"$desktop_graph" &&
-	grep -Fq 'Built-in Audio Internal Digital Microphone' <<<"$desktop_graph"; then
-	ybv_emit suite audio-final-state PASS 'PipeWire retained the Yoga Book speaker and microphone after all active tests'
-else
-	ybv_emit suite audio-final-state FAIL 'PipeWire did not retain both Yoga Book audio endpoints after active tests'
-fi
+ybv_emit validator quiet-policy PASS 'Quiet diagnostics excluded audible, haptic, suspend and guided workflows' 'scheduled=14'
 
 critical_services=(halo-keyboard.service yogabook-camera.service iio-sensor-proxy.service bluetooth.service ModemManager.service)
 inactive_services=()
@@ -109,9 +82,9 @@ for service in "${critical_services[@]}"; do
 	systemctl is-active --quiet "$service" || inactive_services+=("$service")
 done
 if ((${#inactive_services[@]} == 0)); then
-	ybv_emit suite services-final-state PASS 'All critical Yoga Book integration services remain active' "services=${#critical_services[@]}"
+	ybv_emit suite services-final-state PASS 'All critical Yoga Book integration services remain active after quiet diagnostics' "services=${#critical_services[@]}"
 else
-	ybv_emit suite services-final-state FAIL 'One or more critical Yoga Book integration services are inactive' "services=${inactive_services[*]}"
+	ybv_emit suite services-final-state FAIL 'One or more critical Yoga Book integration services are inactive after quiet diagnostics' "services=${inactive_services[*]}"
 fi
 
 YBV_PHYSICAL_RESULT=PENDING

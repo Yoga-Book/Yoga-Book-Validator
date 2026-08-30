@@ -17,7 +17,7 @@ while (($#)); do
 	*) echo "ERROR: unknown option: $1" >&2; exit 2 ;;
 	esac
 done
-for required in bluetoothctl btmgmt ip ping rfkill timeout; do
+for required in bluetoothctl btmgmt ip mktemp ping rfkill stdbuf timeout; do
 	ybv_has_command "$required" || { echo "ERROR: missing command: $required" >&2; exit 2; }
 done
 ybv_require_x91l || { echo 'ERROR: wireless tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
@@ -79,43 +79,76 @@ else
 	ybv_finish_report_for_user "$real_user" || true
 	exit 1
 fi
-initial_power=$(timeout 5 bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
-[[ $initial_power == yes || $initial_power == no ]] || initial_power=no
-
-controller_info=$(timeout 5 btmgmt --index "$controller_index" info 2>/dev/null || true)
-supported_settings=$(sed -n 's/^[[:space:]]*supported settings: //p' <<<"$controller_info" | head -n 1)
-required_settings=(powered connectable discoverable bondable ssp br/edr le advertising secure-conn privacy phy-configuration)
-missing_settings=()
-for setting in "${required_settings[@]}"; do
-	if [[ " $supported_settings " != *" $setting "* ]]; then
-		missing_settings+=("$setting")
-	fi
-done
-if ((${#missing_settings[@]} == 0)); then
-	ybv_emit wireless bluetooth-features PASS 'Bluetooth controller supports classic, LE and modern security features' 'BR/EDR LE SSP secure-connections advertising privacy'
-else
-	ybv_emit wireless bluetooth-features FAIL 'Bluetooth controller feature set is incomplete' "missing=${missing_settings[*]}"
+controller_info_rc=0
+controller_info=$(timeout 8 bluetoothctl show </dev/null 2>/dev/null) || controller_info_rc=$?
+initial_power=$(sed -n 's/^[[:space:]]*Powered: //p' <<<"$controller_info" | head -n 1)
+initial_power_known=true
+if [[ $initial_power != yes && $initial_power != no ]]; then
+	initial_power_known=false
+	initial_power=unknown
 fi
 
+missing_capabilities=()
+[[ $controller_info == *'(0000110b-0000-1000-8000-00805f9b34fb)'* ]] || missing_capabilities+=(classic-audio)
+[[ $controller_info == *'(00001801-0000-1000-8000-00805f9b34fb)'* ]] || missing_capabilities+=(low-energy-gatt)
+grep -Eq '^[[:space:]]*Roles: central$' <<<"$controller_info" || missing_capabilities+=(central-role)
+grep -Eq '^[[:space:]]*Roles: peripheral$' <<<"$controller_info" || missing_capabilities+=(peripheral-role)
+advertising_instances=$(sed -n 's/^[[:space:]]*SupportedInstances: //p' <<<"$controller_info" | head -n 1)
+[[ -n $advertising_instances && $advertising_instances != '0x00 (0)' ]] || missing_capabilities+=(advertising)
+if ((controller_info_rc != 0)) || [[ -z $controller_info ]]; then
+	ybv_emit wireless bluetooth-features FAIL 'Bluetooth stack capability inventory is unavailable' "exit=$controller_info_rc bytes=${#controller_info}"
+elif ((${#missing_capabilities[@]} == 0)); then
+	ybv_emit wireless bluetooth-features PASS 'Bluetooth stack exposes classic, LE and advertising capabilities' 'classic-audio LE-GATT central peripheral advertising'
+else
+	ybv_emit wireless bluetooth-features FAIL 'Bluetooth stack capability set is incomplete' "missing=${missing_capabilities[*]}"
+fi
+
+if [[ $initial_power_known != true ]]; then
+	ybv_emit wireless bluetooth-power FAIL 'Bluetooth controller power state could not be captured safely'
+	ybv_emit wireless bluetooth-scan SKIP 'Bluetooth discovery was not started because the initial power state is unknown'
+	ybv_emit wireless bluetooth-rf SKIP 'Bluetooth RF reception was not exercised because discovery was not started'
+	ybv_emit wireless state-restore PASS 'No Bluetooth state was changed after the incomplete initial snapshot'
+	ybv_finish_report_for_user "$real_user" || true
+	exit 1
+fi
+
+discovery_pid=
+discovery_file=
+
 restore_wireless() {
-	local restore_rc=0 current_soft current_power
+	local current_soft current_power
+	if [[ -n ${discovery_pid:-} ]]; then
+		kill "$discovery_pid" 2>/dev/null || true
+		wait "$discovery_pid" 2>/dev/null || true
+		discovery_pid=
+	fi
+	timeout 5 bluetoothctl scan off >/dev/null 2>&1 || true
 	timeout 5 btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
-	rfkill unblock bluetooth || restore_rc=1
+	if [[ -n ${discovery_file:-} ]]; then
+		rm -f -- "$discovery_file"
+		discovery_file=
+	fi
+	rfkill unblock bluetooth >/dev/null 2>&1 || true
 	sleep 1
 	if [[ $initial_power == yes ]]; then
-		timeout 5 btmgmt --index "$controller_index" power on >/dev/null 2>&1 || restore_rc=1
+		timeout 5 btmgmt --index "$controller_index" power on >/dev/null 2>&1 || true
 	else
-		timeout 5 btmgmt --index "$controller_index" power off >/dev/null 2>&1 || restore_rc=1
+		timeout 5 btmgmt --index "$controller_index" power off >/dev/null 2>&1 || true
 	fi
 	if [[ $initial_soft == 1 ]]; then
-		rfkill block bluetooth || restore_rc=1
+		rfkill block bluetooth >/dev/null 2>&1 || true
+	else
+		rfkill unblock bluetooth >/dev/null 2>&1 || true
 	fi
-	sleep 1
-	current_soft=$(<"$rfkill_path/soft")
-	current_power=$(timeout 5 bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
-	[[ $current_soft == "$initial_soft" ]] || restore_rc=1
-	[[ $current_power == "$initial_power" ]] || restore_rc=1
-	return "$restore_rc"
+	for _ in {1..10}; do
+		current_soft=$(<"$rfkill_path/soft")
+		current_power=$(timeout 5 bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered: //p' | head -n 1 || true)
+		if [[ $current_soft == "$initial_soft" && $current_power == "$initial_power" ]]; then
+			return 0
+		fi
+		sleep 0.5
+	done
+	return 1
 }
 ybv_register_restore_callback restore_wireless
 trap 'restore_wireless || true' EXIT
@@ -141,24 +174,47 @@ else
 	ybv_emit wireless bluetooth-power FAIL 'Bluetooth controller could not be powered on'
 fi
 
+discovery_started=false
 discovery_output=
 if [[ $powered == true ]]; then
-	discovery_output=$(timeout 8 btmgmt --index "$controller_index" find 2>&1 || true)
+	discovery_file=$(mktemp /tmp/yogabook-validator-bluetooth.XXXXXX)
+	chmod 600 "$discovery_file"
+	timeout 12 stdbuf -oL -eL bluetoothctl --timeout 8 scan on >"$discovery_file" 2>&1 &
+	discovery_pid=$!
+	for _ in {1..25}; do
+		if timeout 5 bluetoothctl show 2>/dev/null | grep -Fq 'Discovering: yes'; then
+			discovery_started=true
+			break
+		fi
+		kill -0 "$discovery_pid" 2>/dev/null || break
+		sleep 0.2
+	done
 fi
-if grep -Fq 'Discovery started' <<<"$discovery_output"; then
+if [[ $discovery_started == true ]]; then
 	ybv_emit wireless bluetooth-scan PASS 'Bluetooth discovery entered the active state' 'bounded scan'
+	sleep 6
 else
 	ybv_emit wireless bluetooth-scan FAIL 'Bluetooth discovery did not enter the active state'
 fi
-discovery_reports=$(grep -c ' dev_found:' <<<"$discovery_output" || true)
+timeout 5 bluetoothctl scan off >/dev/null 2>&1 || true
+timeout 5 btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
+if [[ -n $discovery_pid ]]; then
+	wait "$discovery_pid" 2>/dev/null || true
+	discovery_pid=
+fi
+if [[ -n $discovery_file && -r $discovery_file ]]; then
+	discovery_output=$(<"$discovery_file")
+	rm -f -- "$discovery_file"
+	discovery_file=
+fi
+discovery_reports=$(grep -Ec '\] Device ' <<<"$discovery_output" || true)
 if ((discovery_reports > 0)); then
 	ybv_emit wireless bluetooth-rf PASS 'Bluetooth received over-the-air discovery reports' "reports=$discovery_reports identities=discarded"
-elif grep -Fq 'Discovery started' <<<"$discovery_output"; then
+elif [[ $discovery_started == true ]]; then
 	ybv_emit wireless bluetooth-rf WARN 'Bluetooth scan completed but no nearby peer was observed' 'identities=discarded'
 else
 	ybv_emit wireless bluetooth-rf FAIL 'Bluetooth RF reception could not be exercised'
 fi
-timeout 5 btmgmt --index "$controller_index" stop-find >/dev/null 2>&1 || true
 
 if restore_wireless; then
 	ybv_emit wireless state-restore PASS 'Restored the original Bluetooth power and rfkill state' "powered=$initial_power soft-blocked=$initial_soft"
