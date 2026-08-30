@@ -11,7 +11,7 @@ trap cleanup EXIT
 
 required=(
 	README.md ATTRIBUTION.md CONTRIBUTING.md LICENSE Makefile
-	docs/coverage.md
+	docs/coverage.md data/acceptance.json
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
 	libexec/yogabook-validator-category.sh
@@ -70,6 +70,50 @@ if command -v shellcheck >/dev/null; then
 fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py" "$root"/libexec/*.py
 python3 "$root/tests/test-report.py"
+python3 - "$root/data/acceptance.json" "$root/docs/coverage.md" "$root/ui/yogabook_validator_ui.py" <<'PY'
+import ast
+import json
+from pathlib import Path
+import sys
+
+matrix = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert matrix["schema"] == "org.yogabook.validator.acceptance/v1"
+assert len(matrix["components"]) == 23
+assert len({item["id"] for item in matrix["components"]}) == 23
+for component in matrix["components"]:
+    assert set(component["layers"]) == {"structural", "functional", "physical"}
+    assert all(component["layers"][layer] for layer in component["layers"])
+declared = {
+    selector
+    for component in matrix["components"]
+    for layer in component["layers"].values()
+    for selector in layer
+}
+assert set(matrix["unimplemented_selectors"]) <= declared
+
+table_names = set()
+for line in Path(sys.argv[2]).read_text(encoding="utf-8").splitlines():
+    if not line.startswith("|"):
+        continue
+    name = line.split("|", 2)[1].strip()
+    if name not in {"Component", "---"}:
+        table_names.add(name)
+assert table_names == {item["name"] for item in matrix["components"]}
+
+module = ast.parse(Path(sys.argv[3]).read_text(encoding="utf-8"))
+assignment = next(
+    node for node in module.body
+    if isinstance(node, ast.Assign)
+    and any(isinstance(target, ast.Name) and target.id == "PHYSICAL_CHECKS" for target in node.targets)
+)
+physical_ids = {item[0] for item in ast.literal_eval(assignment.value)}
+required_physical = {
+    selector.removeprefix("physical/")
+    for component in matrix["components"]
+    for selector in component["layers"]["physical"]
+}
+assert required_physical <= physical_ids, required_physical - physical_ids
+PY
 state_guard_root="$temporary/state-guard-root"
 mkdir -p "$state_guard_root/sys/class/backlight/panel"
 printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
@@ -145,6 +189,7 @@ PY
 [[ $metainfo_version == "$package_version" ]]
 grep -Fq "yogabook-validator_${package_version}_all.deb" "$root/README.md"
 grep -Fq 'docs/coverage.md' "$root/debian/yogabook-validator.docs"
+grep -Fq 'data/acceptance.json usr/share/yogabook-validator' "$root/debian/yogabook-validator.install"
 
 store_line=$(grep -n 'store yogabook' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
 stop_line=$(grep -n 'systemctl --user stop' "$root/libexec/yogabook-validator-active.sh" | head -n1 | cut -d: -f1)
@@ -565,6 +610,8 @@ assert report["run"]["physical_acceptance_result"] == "INCOMPLETE"
 assert report["summary"]["checks_total"] == 3
 assert report["summary"]["observations_total"] == 3
 assert report["summary"]["suite_rollups"]["total"] == 3
+assert report["acceptance"]["summary"]["components_total"] == 23
+assert report["acceptance"]["summary"]["components_complete"] == 0
 PY
 full_failure_rc=0
 YBV_SYSROOT="$temporary/full-sysroot" YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py" \

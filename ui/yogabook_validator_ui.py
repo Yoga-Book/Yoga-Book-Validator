@@ -53,9 +53,11 @@ PHYSICAL_CHECKS = [
     ("halo-touchpad", "Halo touchpad tracks and clicks correctly"),
     ("halo-haptics", "Both Halo haptic actuators respond"),
     ("halo-backlight", "Halo keyboard backlight brightness control works"),
+    ("indicator-leds", "Indicator and charging LEDs visibly follow system and cable state"),
     ("pen-direction", "Pen directions match the display in all axes"),
     ("pen-pressure", "Pen pressure works in a drawing application"),
     ("display-touch", "Display touchscreen works in keyboard and pen modes"),
+    ("display-stability", "Display image remains stable without corruption or flicker"),
     ("auto-rotation", "Display rotates correctly and returns to landscape"),
     ("display-brightness", "Display brightness changes smoothly under manual control"),
     ("micro-hdmi", "Micro-HDMI outputs video and audio to an external display"),
@@ -71,6 +73,10 @@ PHYSICAL_CHECKS = [
     ("gnss", "GNSS receives satellites outdoors"),
     ("suspend-resume", "Suspend/resume preserves working hardware"),
     ("charging", "Battery charges and reports plausible state"),
+    ("thermal-stability", "Tablet remains thermally safe and stable under representative use"),
+    ("cold-boots", "Three physical cold boots return to the pinned Yoga Book kernel"),
+    ("reboot", "A physical reboot returns to a fully working desktop"),
+    ("poweroff", "A full shutdown powers the tablet off cleanly"),
 ]
 
 
@@ -371,6 +377,11 @@ class ValidatorWindow(Adw.ApplicationWindow):
             subtitle="Start with the passive audit.",
         )
         self.summary.add(self.placeholder)
+
+        self.acceptance = Adw.PreferencesGroup(title="Component acceptance")
+        self.acceptance.set_visible(False)
+        page.add(self.acceptance)
+        self.acceptance_rows: list[Adw.ActionRow] = []
 
         exports = Adw.PreferencesGroup(title="Evidence")
         page.add(exports)
@@ -802,6 +813,10 @@ class ValidatorWindow(Adw.ApplicationWindow):
         for row in self.result_rows:
             self.summary.remove(row)
         self.result_rows.clear()
+        for row in self.acceptance_rows:
+            self.acceptance.remove(row)
+        self.acceptance_rows.clear()
+        self.acceptance.set_visible(False)
 
     def render_report(self, report: Path) -> None:
         self.clear_results()
@@ -813,15 +828,43 @@ class ValidatorWindow(Adw.ApplicationWindow):
             summary = model["summary"]
             counts = summary["counts"]
             result = summary["result"]
-            self.overview_row.set_title(
+            acceptance = model.get("acceptance")
+            readiness = acceptance.get("summary", {}) if acceptance else {}
+            accepted = readiness.get("components_complete", 0)
+            component_total = readiness.get("components_total", 0)
+            title = (
                 "No problems found" if result == "PASS" else
                 "Completed with warnings" if result == "PASS_WITH_WARNINGS" else
                 "Problems found"
             )
-            self.overview_row.set_subtitle(
+            if result == "PASS" and acceptance and accepted < component_total:
+                title = "Diagnostics passed · acceptance incomplete"
+            self.overview_row.set_title(title)
+            subtitle = (
                 f"{counts['PASS']} passed · {counts['FAIL']} failed · {counts['WARN']} warnings · "
-                f"{counts['SKIP']} skipped · {summary['coverage_percent']}% coverage"
+                f"{counts['SKIP']} skipped · {summary['coverage_percent']}% check coverage"
             )
+            if acceptance:
+                subtitle += f" · {accepted}/{component_total} components accepted"
+            self.overview_row.set_subtitle(subtitle)
+            if acceptance:
+                self.acceptance.set_visible(True)
+                for component in acceptance.get("components", []):
+                    layers = component["layers"]
+                    row = Adw.ActionRow(
+                        title=component["name"],
+                        subtitle=(
+                            f"Structural {layers['structural']['status']} · "
+                            f"Functional {layers['functional']['status']} · "
+                            f"Physical {layers['physical']['status']}"
+                        ),
+                    )
+                    badge = Gtk.Label(label=component["status"])
+                    badge.add_css_class("status-badge")
+                    badge.add_css_class(f"status-{component['status'].lower().replace('_', '-')}")
+                    row.add_suffix(badge)
+                    self.acceptance.add(row)
+                    self.acceptance_rows.append(row)
         else:
             with report.open(newline="", encoding="utf-8") as stream:
                 rows = [row for row in csv.DictReader(stream, delimiter="\t") if row["subsystem"] != "suite"]
@@ -934,7 +977,7 @@ class ValidatorApplication(Adw.Application):
             .status-pass { background: alpha(@success_color, .18); color: @success_color; }
             .status-fail { background: alpha(@error_color, .18); color: @error_color; }
             .status-warn { background: alpha(@warning_color, .18); color: @warning_color; }
-            .status-skip, .status-info { background: alpha(currentColor, .10); }
+            .status-skip, .status-info, .status-unimplemented, .status-incomplete, .status-not-run { background: alpha(currentColor, .10); }
         """)
         display = Gdk.Display.get_default()
         if display:

@@ -1,0 +1,221 @@
+{
+  "schema": "org.yogabook.validator.acceptance/v1",
+  "unimplemented_selectors": [
+    "display/hdmi-link",
+    "audio/hdmi-route",
+    "audio/headset-playback",
+    "audio/headset-capture",
+    "input/headset-events",
+    "modem/registration",
+    "modem/ip-traffic"
+  ],
+  "components": [
+    {
+      "id": "boot-kernel",
+      "name": "Boot and kernel",
+      "layers": {
+        "structural": ["platform/kernel", "platform/grub-default", "platform/package-integrity"],
+        "functional": ["suite/stability"],
+        "physical": ["physical/cold-boots"]
+      }
+    },
+    {
+      "id": "display-gpu",
+      "name": "DSI display and GPU",
+      "layers": {
+        "structural": ["display/drm-driver", "display/dsi-panel", "display/mutter-layout", "display/compositor-gpu", "display/backlight"],
+        "functional": ["display/rotation-upright-return", "display/panel-backlight"],
+        "physical": ["physical/display-stability", "physical/auto-rotation", "physical/display-brightness"]
+      }
+    },
+    {
+      "id": "micro-hdmi",
+      "name": "Micro-HDMI",
+      "layers": {
+        "structural": ["display/hdmi-connector", "audio/hdmi-lpe"],
+        "functional": ["display/hdmi-link", "audio/hdmi-route"],
+        "physical": ["physical/micro-hdmi"]
+      }
+    },
+    {
+      "id": "halo-input",
+      "name": "Halo keyboard and touchpad",
+      "layers": {
+        "structural": ["input/halo-keyboard", "input/halo-touchpad", "input/halo-keyboard-capabilities", "input/halo-touchpad-capabilities"],
+        "functional": ["input/keyboard-returned", "input/halo-keyboard-touchpad-restored", "input/halo-service-restarts"],
+        "physical": ["physical/halo-keys", "physical/halo-touchpad", "physical/halo-backlight"]
+      }
+    },
+    {
+      "id": "haptics",
+      "name": "Haptics",
+      "layers": {
+        "structural": ["input/haptics", "input/haptic-capabilities"],
+        "functional": ["input/haptic-left", "input/haptic-right"],
+        "physical": ["physical/halo-haptics"]
+      }
+    },
+    {
+      "id": "pen",
+      "name": "Pen and drawing surface",
+      "layers": {
+        "structural": ["input/wacom-pen", "input/pen-calibration"],
+        "functional": ["input/pen-appeared", "input/pen-capabilities", "input/pen-disappeared"],
+        "physical": ["physical/pen-direction", "physical/pen-pressure"]
+      }
+    },
+    {
+      "id": "touchscreen",
+      "name": "Display touchscreen",
+      "layers": {
+        "structural": ["input/touchscreen", "input/display-touch-capabilities"],
+        "functional": ["input/touchscreen-pen-mode", "input/touchscreen-restored"],
+        "physical": ["physical/display-touch"]
+      }
+    },
+    {
+      "id": "rotation-sensors",
+      "name": "Rotation and sensors",
+      "layers": {
+        "structural": ["sensors/iio-layout", "sensors/sensor-proxy-capabilities", "display/rotation-policy"],
+        "functional": ["sensors/layout-*", "sensors/*-accelerometer", "display/rotation-upright-return"],
+        "physical": ["physical/auto-rotation"]
+      }
+    },
+    {
+      "id": "audio",
+      "name": "Speakers and microphones",
+      "layers": {
+        "structural": ["audio/alsa-card", "audio/sof-firmware", "audio/sof-topology", "audio/ucm-alias", "audio/ucm-devices", "audio/pipewire"],
+        "functional": ["audio/speaker-tone", "audio/mic-signal", "audio/state-restore"],
+        "physical": ["physical/speakers", "physical/internal-microphone"]
+      }
+    },
+    {
+      "id": "headset",
+      "name": "Headset path",
+      "layers": {
+        "structural": ["audio/ucm-devices", "input/headset-jack-capabilities"],
+        "functional": ["audio/headset-playback", "audio/headset-capture", "input/headset-events"],
+        "physical": ["physical/headphones", "physical/headset-microphone", "physical/jack-detection", "physical/headset-buttons"]
+      }
+    },
+    {
+      "id": "cameras",
+      "name": "Cameras",
+      "layers": {
+        "structural": ["camera/atomisp", "camera/sensor-ov2740", "camera/sensor-ov8858", "camera/focus-actuator"],
+        "functional": ["camera/front-stream", "camera/front-signal", "camera/rear-stream", "camera/rear-signal", "camera/focus-control", "camera/route-restore"],
+        "physical": ["physical/front-camera", "physical/rear-camera"]
+      }
+    },
+    {
+      "id": "wifi",
+      "name": "Wi-Fi",
+      "layers": {
+        "structural": ["wireless/wifi-driver", "wireless/wifi-interface"],
+        "functional": ["wireless/wifi-link", "wireless/wifi-route", "wireless/wifi-gateway"],
+        "physical": ["physical/wifi"]
+      }
+    },
+    {
+      "id": "bluetooth",
+      "name": "Bluetooth",
+      "layers": {
+        "structural": ["wireless/bluetooth-controller", "wireless/bluetooth-service"],
+        "functional": ["wireless/bluetooth-features", "wireless/bluetooth-scan", "wireless/bluetooth-rf", "wireless/state-restore"],
+        "physical": ["physical/bluetooth"]
+      }
+    },
+    {
+      "id": "usb-otg",
+      "name": "USB OTG",
+      "layers": {
+        "structural": ["usb/controller", "usb/root-hub-*", "usb/role-switch"],
+        "functional": ["usb/removable-device", "usb/kernel-errors"],
+        "physical": ["physical/usb-otg"]
+      }
+    },
+    {
+      "id": "sd-card",
+      "name": "SD card",
+      "layers": {
+        "structural": ["storage/sd-slot", "storage/sd-card"],
+        "functional": ["storage/sd-block-read", "suite/storage-write"],
+        "physical": ["physical/sd-card"]
+      }
+    },
+    {
+      "id": "lte",
+      "name": "LTE modem",
+      "layers": {
+        "structural": ["modem/xmm-usb", "modem/modemmanager", "modem/sim"],
+        "functional": ["modem/registration", "modem/ip-traffic"],
+        "physical": ["physical/lte-data"]
+      }
+    },
+    {
+      "id": "gnss",
+      "name": "GNSS",
+      "layers": {
+        "structural": ["gnss/runtime-assets", "gnss/services", "gnss/nmea-pipe"],
+        "functional": ["gnss/transport", "gnss/gpsd", "gnss/sky", "gnss/fix", "gnss/service-stability"],
+        "physical": ["physical/gnss"]
+      }
+    },
+    {
+      "id": "battery-charging",
+      "name": "Battery and charging",
+      "layers": {
+        "structural": ["power/battery-identity", "power/battery-health", "power/charger-identity"],
+        "functional": ["power/battery-telemetry", "power/battery-charge-data", "power/charger-state", "power/charger-telemetry", "power/upower"],
+        "physical": ["physical/charging"]
+      }
+    },
+    {
+      "id": "thermal-resources",
+      "name": "Thermals and resources",
+      "layers": {
+        "structural": ["thermal/thermald-service", "thermal/thermald-policy", "thermal/coretemp-critical", "thermal/cooling-capacity"],
+        "functional": ["thermal/live-temperatures", "resources/*-headroom", "resources/*-cpu", "thermal/kernel-events"],
+        "physical": ["physical/thermal-stability"]
+      }
+    },
+    {
+      "id": "suspend-resume",
+      "name": "Suspend/resume",
+      "layers": {
+        "structural": ["platform/suspend-plumbing"],
+        "functional": ["suspend/rtcwake", "suspend/playback-after", "suspend/capture-after", "suspend/stream-xruns", "suspend/fatal-scan"],
+        "physical": ["physical/suspend-resume"]
+      }
+    },
+    {
+      "id": "buttons-lid",
+      "name": "Lid and hardware buttons",
+      "layers": {
+        "structural": ["input/platform-buttons-capabilities", "input/lid-switch-capabilities"],
+        "functional": ["physical/hardware-buttons", "physical/lid-switch"],
+        "physical": ["physical/hardware-buttons", "physical/lid-switch"]
+      }
+    },
+    {
+      "id": "indicator-leds",
+      "name": "Indicator and charging LEDs",
+      "layers": {
+        "structural": ["platform/leds"],
+        "functional": ["platform/halo-backlight", "platform/indicator-led", "platform/charging-led", "platform/state-restore"],
+        "physical": ["physical/halo-backlight", "physical/indicator-leds", "physical/charging"]
+      }
+    },
+    {
+      "id": "reboot-poweroff",
+      "name": "Reboot and poweroff",
+      "layers": {
+        "structural": ["platform/failed-units", "platform/kernel-errors"],
+        "functional": ["suite/stability"],
+        "physical": ["physical/reboot", "physical/poweroff"]
+      }
+    }
+  ]
+}

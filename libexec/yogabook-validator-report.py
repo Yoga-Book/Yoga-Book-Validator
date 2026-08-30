@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fnmatch
 import hashlib
 import html
 import json
@@ -22,6 +23,16 @@ from typing import Any
 SCHEMA = "org.yogabook.validator.report/v1"
 VALID_STATUSES = {"PASS", "FAIL", "WARN", "SKIP", "INFO"}
 STATUS_ORDER = {"FAIL": 0, "WARN": 1, "SKIP": 2, "PASS": 3, "INFO": 4}
+ACCEPTANCE_SCHEMA = "org.yogabook.validator.acceptance/v1"
+ACCEPTANCE_LAYERS = ("structural", "functional", "physical")
+ACCEPTANCE_STATUS_ORDER = {
+    "FAIL": 0,
+    "WARN": 1,
+    "UNIMPLEMENTED": 2,
+    "INCOMPLETE": 3,
+    "NOT_RUN": 4,
+    "PASS": 5,
+}
 
 CHECK_GUIDANCE = {
     ("platform", "grub-default"): (
@@ -152,6 +163,137 @@ def parse_results(path: Path) -> tuple[list[dict[str, str]], list[str]]:
     return rows, problems
 
 
+def load_acceptance_matrix() -> tuple[dict[str, Any], Path]:
+    configured = os.environ.get("YBV_ACCEPTANCE_MATRIX")
+    candidates = [
+        Path(configured) if configured else None,
+        Path(__file__).resolve().parents[1] / "data" / "acceptance.json",
+        Path("/usr/share/yogabook-validator/acceptance.json"),
+    ]
+    path = next((candidate for candidate in candidates if candidate and candidate.is_file()), None)
+    if path is None:
+        raise FileNotFoundError("acceptance matrix is unavailable")
+    with path.open(encoding="utf-8") as stream:
+        matrix = json.load(stream)
+    if matrix.get("schema") != ACCEPTANCE_SCHEMA or not isinstance(matrix.get("components"), list):
+        raise ValueError("acceptance matrix has an unsupported schema")
+    ids = [component.get("id") for component in matrix["components"]]
+    if not ids or any(not item for item in ids) or len(ids) != len(set(ids)):
+        raise ValueError("acceptance matrix component IDs must be present and unique")
+    for component in matrix["components"]:
+        layers = component.get("layers", {})
+        for layer in ACCEPTANCE_LAYERS:
+            selectors = layers.get(layer)
+            if not isinstance(selectors, list) or not selectors or any("/" not in item for item in selectors):
+                raise ValueError(f"acceptance component {component['id']} has invalid {layer} selectors")
+    declared_selectors = {
+        selector
+        for component in matrix["components"]
+        for layer in ACCEPTANCE_LAYERS
+        for selector in component["layers"][layer]
+    }
+    unimplemented = matrix.get("unimplemented_selectors", [])
+    if not isinstance(unimplemented, list) or any(selector not in declared_selectors for selector in unimplemented):
+        raise ValueError("acceptance matrix has invalid unimplemented selectors")
+    return matrix, path
+
+
+def build_acceptance(rows: list[dict[str, str]]) -> dict[str, Any]:
+    matrix, matrix_path = load_acceptance_matrix()
+    unimplemented_catalog = set(matrix.get("unimplemented_selectors", []))
+    observations: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        observations[f"{row['subsystem']}/{row['check_id']}"].append(row)
+
+    def selector_evidence(selector: str) -> dict[str, Any] | None:
+        matched = []
+        for check_id, check_rows in observations.items():
+            if not fnmatch.fnmatchcase(check_id, selector):
+                continue
+            statuses = [row["status"] for row in check_rows]
+            status = min(statuses, key=lambda value: STATUS_ORDER[value])
+            if status == "SKIP":
+                status = "INCOMPLETE"
+            elif status == "INFO":
+                status = "PASS"
+            matched.append(
+                {
+                    "id": check_id,
+                    "status": status,
+                    "observations": len(check_rows),
+                    "observed_statuses": statuses,
+                }
+            )
+        if not matched:
+            return None
+        return {
+            "selector": selector,
+            "status": min((item["status"] for item in matched), key=lambda value: ACCEPTANCE_STATUS_ORDER[value]),
+            "matches": matched,
+        }
+
+    components = []
+    for source in matrix["components"]:
+        layers = {}
+        for layer_name in ACCEPTANCE_LAYERS:
+            evidence = []
+            missing = []
+            unimplemented = []
+            for selector in source["layers"][layer_name]:
+                item = selector_evidence(selector)
+                if item is None:
+                    if selector in unimplemented_catalog:
+                        unimplemented.append(selector)
+                    else:
+                        missing.append(selector)
+                else:
+                    evidence.append(item)
+            statuses = [item["status"] for item in evidence]
+            if "FAIL" in statuses:
+                status = "FAIL"
+            elif "WARN" in statuses:
+                status = "WARN"
+            elif unimplemented:
+                status = "UNIMPLEMENTED"
+            elif "INCOMPLETE" in statuses:
+                status = "INCOMPLETE"
+            elif missing:
+                status = "NOT_RUN"
+            else:
+                status = "PASS"
+            layers[layer_name] = {
+                "status": status,
+                "required_selectors": source["layers"][layer_name],
+                "missing_selectors": missing,
+                "unimplemented_selectors": unimplemented,
+                "evidence": evidence,
+            }
+        overall = min(
+            (layers[layer]["status"] for layer in ACCEPTANCE_LAYERS),
+            key=lambda value: ACCEPTANCE_STATUS_ORDER[value],
+        )
+        components.append({"id": source["id"], "name": source["name"], "status": overall, "layers": layers})
+
+    counts = Counter(component["status"] for component in components)
+    complete = counts["PASS"]
+    total = len(components)
+    return {
+        "schema": matrix["schema"],
+        "matrix": file_evidence(matrix_path),
+        "summary": {
+            "components_total": total,
+            "components_complete": complete,
+            "readiness_percent": round(complete / total * 100, 1) if total else 0.0,
+            "counts": {
+                status: counts[status]
+                for status in ("PASS", "FAIL", "WARN", "UNIMPLEMENTED", "INCOMPLETE", "NOT_RUN")
+            },
+            "note": "A component is complete only when structural, functional and physical layers all pass.",
+        },
+        "components": components,
+    }
+
+
 def severity_for(row: dict[str, str]) -> str:
     if row["status"] == "WARN":
         return "medium"
@@ -247,6 +389,7 @@ def build_model(directory: Path) -> dict[str, Any]:
     derived_result = "FAIL" if counts["FAIL"] else "PASS"
     if not counts["FAIL"] and counts["WARN"]:
         derived_result = "PASS_WITH_WARNINGS"
+    acceptance = build_acceptance(rows)
     model = {
         "schema": SCHEMA,
         "generated_at": log.get("finished") or datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -273,6 +416,7 @@ def build_model(directory: Path) -> dict[str, Any]:
                 "note": "Suite roll-ups are excluded from check totals to avoid double-counting root findings.",
             },
         },
+        "acceptance": acceptance,
         "environment": environment,
         "subsystems": subsystems,
         "findings": findings,
@@ -319,6 +463,8 @@ def render_markdown(model: dict[str, Any]) -> str:
     run = model["run"]
     summary = model["summary"]
     counts = summary["counts"]
+    acceptance = model["acceptance"]
+    readiness = acceptance["summary"]
     lines = [
         "# Yoga Book Validator diagnostic report",
         "",
@@ -335,9 +481,48 @@ def render_markdown(model: dict[str, Any]) -> str:
         f"**{counts['SKIP']} skipped**. Coverage: **{summary['coverage_percent']}%**.",
         "Suite roll-up rows are not counted twice in these totals.",
         "",
+        "## Device acceptance readiness",
+        "",
+        f"**{readiness['components_complete']} of {readiness['components_total']} components complete "
+        f"({readiness['readiness_percent']}%).** Structural, functional and physical layers must all pass.",
+        f"Matrix SHA-256: `{acceptance['matrix']['sha256']}`.",
+        "",
+        "| Component | Overall | Structural | Functional | Physical |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for component in acceptance["components"]:
+        layers = component["layers"]
+        lines.append(
+            f"| {markdown_escape(component['name'])} | {component['status']} | "
+            f"{layers['structural']['status']} | {layers['functional']['status']} | {layers['physical']['status']} |"
+        )
+    lines.extend([
+        "",
+        "### Acceptance blockers",
+        "",
+    ])
+    for component in acceptance["components"]:
+        if component["status"] == "PASS":
+            continue
+        blockers = []
+        for layer_name in ACCEPTANCE_LAYERS:
+            layer = component["layers"][layer_name]
+            if layer["status"] == "PASS":
+                continue
+            details = list(layer["missing_selectors"])
+            details.extend(f"unimplemented: {selector}" for selector in layer["unimplemented_selectors"])
+            details.extend(
+                f"{item['selector']}={item['status']}"
+                for item in layer["evidence"]
+                if item["status"] != "PASS"
+            )
+            blockers.append(f"{layer_name} {layer['status']}: {', '.join(details) or 'review evidence'}")
+        lines.append(f"- **{markdown_escape(component['name'])}** — {markdown_escape('; '.join(blockers))}")
+    lines.extend([
+        "",
         "## Priority findings",
         "",
-    ]
+    ])
     if not model["findings"]:
         lines.extend(["No failed checks or warnings were recorded.", ""])
     for finding in model["findings"]:
@@ -382,6 +567,8 @@ def render_markdown(model: dict[str, Any]) -> str:
 def render_html(model: dict[str, Any]) -> str:
     summary = model["summary"]
     counts = summary["counts"]
+    acceptance = model["acceptance"]
+    readiness = acceptance["summary"]
     status_class = "fail" if counts["FAIL"] else ("warn" if counts["WARN"] else "pass")
     finding_cards = []
     for finding in model["findings"]:
@@ -400,6 +587,17 @@ def render_html(model: dict[str, Any]) -> str:
         f"<td>{item['counts'].get('PASS', 0)}</td><td>{item['counts'].get('FAIL', 0)}</td>"
         f"<td>{item['counts'].get('WARN', 0)}</td><td>{item['counts'].get('SKIP', 0)}</td></tr>"
         for item in model["subsystems"]
+    )
+    acceptance_rows = "".join(
+        f"<tr><td>{html.escape(item['name'])}</td>"
+        f"<td><span class='badge {item['status'].lower().replace('_', '-')}'>{html.escape(item['status'])}</span></td>"
+        + "".join(
+            f"<td><span class='badge {item['layers'][layer]['status'].lower().replace('_', '-')}'>{html.escape(item['layers'][layer]['status'])}</span>"
+            f"<small>{html.escape(', '.join(item['layers'][layer]['missing_selectors'] + ['unimplemented: ' + selector for selector in item['layers'][layer]['unimplemented_selectors']]))}</small></td>"
+            for layer in ACCEPTANCE_LAYERS
+        )
+        + "</tr>"
+        for item in acceptance["components"]
     )
     result_rows = "".join(
         f"<tr><td><span class='badge {row['status'].lower()}'>{row['status']}</span></td>"
@@ -428,15 +626,18 @@ main{{max-width:1180px;margin:auto;padding:32px 20px 64px}}h1{{margin:.2rem 0}}h
 .finding.high,.finding.critical{{background:#fffafa}}.finding.medium{{border-left-color:var(--warn);background:#fffdf8}}
 .finding-head{{display:flex;gap:10px;align-items:center}}.finding-head strong{{margin-left:auto;color:var(--fail)}}.finding.medium .finding-head strong{{color:var(--warn)}}
 .badge{{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.78rem;font-weight:750}}.badge.pass{{color:var(--pass);background:#e8f5ee}}
-.badge.fail{{color:var(--fail);background:#fff0ee}}.badge.warn{{color:var(--warn);background:#fff4df}}.badge.skip,.badge.incomplete,.badge.info{{color:var(--info);background:#edf1f4}}
+.badge.fail{{color:var(--fail);background:#fff0ee}}.badge.warn{{color:var(--warn);background:#fff4df}}.badge.skip,.badge.unimplemented,.badge.incomplete,.badge.not-run,.badge.info{{color:var(--info);background:#edf1f4}}
 .table-wrap{{overflow:auto}}table{{border-collapse:collapse;width:100%}}th,td{{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}}th{{position:sticky;top:0;background:var(--surface)}}
-dl{{display:grid;grid-template-columns:max-content 1fr;gap:7px 18px}}dt{{font-weight:700}}dd{{margin:0}}details{{margin-top:20px}}@media(max-width:620px){{main{{padding:18px 10px}}dl{{grid-template-columns:1fr}}}}
+td small{{display:block;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}}dl{{display:grid;grid-template-columns:max-content 1fr;gap:7px 18px}}dt{{font-weight:700}}dd{{margin:0}}details{{margin-top:20px}}@media(max-width:620px){{main{{padding:18px 10px}}dl{{grid-template-columns:1fr}}}}
 </style></head><body><main>
 <section class='hero'><p class='muted'>Yoga Book Validator {html.escape(model['validator']['version'])}</p><h1>Diagnostic report</h1>
 <p><b>{html.escape(summary['result'])}</b> · {html.escape(str(model['run']['command']))} · {html.escape(str(model['run']['started']))}</p>
 <p class='muted'>Independent check totals exclude suite roll-ups. Repeated observations remain available for consistency analysis.</p></section>
 <section class='cards'><div class='metric'><b>{counts['PASS']}</b>Passed</div><div class='metric'><b>{counts['FAIL']}</b>Failed</div>
-<div class='metric'><b>{counts['WARN']}</b>Warnings</div><div class='metric'><b>{counts['SKIP']}</b>Skipped</div><div class='metric'><b>{summary['coverage_percent']}%</b>Coverage</div></section>
+<div class='metric'><b>{counts['WARN']}</b>Warnings</div><div class='metric'><b>{counts['SKIP']}</b>Skipped</div><div class='metric'><b>{summary['coverage_percent']}%</b>Check coverage</div>
+<div class='metric'><b>{readiness['components_complete']}/{readiness['components_total']}</b>Components accepted</div></section>
+<h2>Device acceptance readiness · {readiness['readiness_percent']}%</h2><p class='muted'>A component is complete only when structural, functional and physical evidence all pass. Matrix SHA-256: <code>{html.escape(acceptance['matrix']['sha256'])}</code>.</p>
+<section class='panel table-wrap'><table><thead><tr><th>Component</th><th>Overall</th><th>Structural</th><th>Functional</th><th>Physical</th></tr></thead><tbody>{acceptance_rows}</tbody></table></section>
 <h2>Priority findings</h2><section class='findings'>{''.join(finding_cards)}</section>
 <h2>Subsystem health</h2><section class='panel table-wrap'><table><thead><tr><th>Subsystem</th><th>Health</th><th>Pass</th><th>Fail</th><th>Warn</th><th>Skip</th></tr></thead><tbody>{subsystem_rows}</tbody></table></section>
 <h2>Run context</h2><section class='panel'><dl>{environment}</dl><p>Physical acceptance: <b>{html.escape(str(model['run']['physical_acceptance_result']))}</b></p></section>

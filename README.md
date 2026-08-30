@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.28.0_all.deb
+sudo apt install ../yogabook-validator_0.29.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -102,6 +102,11 @@ produces a versioned `report.json`, a readable `report.md`, a self-contained
 report separates individual checks from suite roll-ups, so a failed subsystem
 is not counted twice; it includes coverage, subsystem health, prioritized
 findings, suggested next actions, and SHA-256 hashes for the raw evidence.
+It also evaluates all 23 hardware components against the structural,
+functional and physical layers in the coverage matrix. A component contributes
+to acceptance readiness only when every required selector is present and
+passes; missing runnable evidence is `NOT_RUN`, unavailable test coverage is
+`UNIMPLEMENTED`, and skipped evidence is `INCOMPLETE`.
 
 Use `yogabook-validator report DIRECTORY` to regenerate the derived formats
 from an older raw report. Active hardware tests and category suites ask for

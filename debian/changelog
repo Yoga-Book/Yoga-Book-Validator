@@ -1,3 +1,14 @@
+yogabook-validator (0.29.0) unstable; urgency=medium
+
+  * Evaluate all 23 coverage-matrix components across structural, functional
+    and physical evidence instead of presenting check coverage as acceptance.
+  * Show component readiness and exact missing selectors in JSON, Markdown,
+    HTML and the graphical interface.
+  * Add explicit physical gates for cold boots, display and thermal stability,
+    indicator LEDs, reboot and complete poweroff.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 03:13:00 +0200
+
 yogabook-validator (0.28.0) unstable; urgency=medium
 
   * Produce one complete report that aggregates passive diagnostics and guided

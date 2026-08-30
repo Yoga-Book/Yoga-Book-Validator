@@ -3,9 +3,14 @@
 This matrix defines the evidence required to claim that a Lenovo Yoga Book
 YB1-X91L component works. Presence, package installation and a green passive
 probe are necessary but do not replace functional or physical acceptance.
+The matching machine-readable selectors in `data/acceptance.json` are evaluated
+for every generated report; changes to either representation must keep the same
+23 component rows and three evidence layers.
 
 Coverage is complete only when every applicable row has all three evidence
-layers satisfied and no required check is `FAIL`, `WARN` or `SKIP`:
+layers satisfied and no required check is `FAIL`, `WARN` or `SKIP`. At the
+component level, every layer must therefore be `PASS`; `UNIMPLEMENTED`,
+`INCOMPLETE` and `NOT_RUN` are also explicitly blocking:
 
 1. **Structural** — identity, driver, package, topology and service state.
 2. **Functional** — bounded data or state transition with cleanup verified.
@@ -46,6 +51,10 @@ card, the pen-mode transition and an outdoor GNSS fix.
 - `PASS` proves only the stated check and evidence layer.
 - `WARN` preserves a non-fatal anomaly that still requires review.
 - `SKIP` means the corresponding coverage is incomplete.
+- `INCOMPLETE` means at least one required selector ran but was skipped.
+- `NOT_RUN` means a runnable required selector is absent from this report.
+- `UNIMPLEMENTED` means the matrix requires evidence that this Validator
+  version cannot produce yet; it is an explicit development blocker.
 - `FAIL` means the component or a prerequisite is not working.
 - `validator/state-preservation` must pass for every state-changing action.
 - A category or suite roll-up never replaces its individual check results.

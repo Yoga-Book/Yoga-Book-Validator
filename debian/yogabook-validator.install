@@ -6,3 +6,4 @@ data/org.yogabook.Validator.desktop usr/share/applications
 data/icons/hicolor/scalable/apps/org.yogabook.Validator.svg usr/share/icons/hicolor/scalable/apps
 data/metainfo/org.yogabook.Validator.metainfo.xml usr/share/metainfo
 data/org.yogabook.validator.policy usr/share/polkit-1/actions
+data/acceptance.json usr/share/yogabook-validator

@@ -22,7 +22,7 @@ ybv_begin_report physical "$output_dir"
 physical_file="$YBV_REPORT_DIR/physical-results.tsv"
 printf 'check_id\tstatus\tnote\n' >"$physical_file"
 
-declare -a ids=(speakers headphones internal-microphone headset-microphone jack-detection headset-buttons halo-keys halo-touchpad halo-haptics halo-backlight pen-direction pen-pressure display-touch auto-rotation display-brightness micro-hdmi front-camera rear-camera wifi bluetooth usb-otg sd-card hardware-buttons lid-switch lte-data gnss suspend-resume charging)
+declare -a ids=(speakers headphones internal-microphone headset-microphone jack-detection headset-buttons halo-keys halo-touchpad halo-haptics halo-backlight indicator-leds pen-direction pen-pressure display-touch display-stability auto-rotation display-brightness micro-hdmi front-camera rear-camera wifi bluetooth usb-otg sd-card hardware-buttons lid-switch lte-data gnss suspend-resume charging thermal-stability cold-boots reboot poweroff)
 declare -a labels=(
 	'Stereo speakers play cleanly'
 	'Headphones play cleanly'
@@ -34,9 +34,11 @@ declare -a labels=(
 	'Halo touchpad tracks and clicks correctly'
 	'Both Halo haptic actuators respond'
 	'Halo keyboard backlight brightness control works'
+	'Indicator and charging LEDs visibly follow system and cable state'
 	'Pen directions match the display in all axes'
 	'Pen pressure works in a drawing application'
 	'Display touchscreen works in keyboard and pen modes'
+	'Display image remains stable without corruption or flicker'
 	'Display rotates correctly and returns to landscape'
 	'Display brightness changes smoothly under manual control'
 	'Micro-HDMI outputs video and audio to an external display'
@@ -52,6 +54,10 @@ declare -a labels=(
 	'GNSS receives satellites outdoors'
 	'Suspend/resume preserves working hardware'
 	'Battery charges and reports plausible state'
+	'Tablet remains thermally safe and stable under representative use'
+	'Three physical cold boots return to the pinned Yoga Book kernel'
+	'A physical reboot returns to a fully working desktop'
+	'A full shutdown powers the tablet off cleanly'
 )
 
 answer_for() {
