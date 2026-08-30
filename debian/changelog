@@ -1,3 +1,11 @@
+yogabook-validator (0.27.1) unstable; urgency=medium
+
+  * Verify the effective GRUB_TOP_LEVEL, kernel image, initrd and running
+    release before falling back to saved-entry state, avoiding false warnings
+    when the supported top-level selection contract is correctly configured.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 02:11:00 +0200
+
 yogabook-validator (0.27.0) unstable; urgency=medium
 
   * Add an authoritative component coverage matrix and keep conditional skips

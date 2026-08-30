@@ -32,7 +32,7 @@ else
 	ybv_emit platform dmi FAIL 'Unsupported or unidentified hardware' "$vendor $product"
 fi
 
-kernel=$(uname -r)
+kernel=${YBV_KERNEL_RELEASE:-$(uname -r)}
 if [[ $kernel == *yogabook* ]]; then
 	ybv_emit platform kernel PASS 'Yoga Book kernel is running' "$kernel"
 else
@@ -40,15 +40,38 @@ else
 fi
 ybv_capture 'Kernel command line' cat "$(ybv_path /proc/cmdline)"
 
-if ybv_has_command grub-editenv; then
+grub_top_level=
+while IFS= read -r configured_top_level; do
+	grub_top_level=$configured_top_level
+done < <(
+	for grub_config in "$(ybv_path /etc/default/grub)" "$(ybv_path /etc/default/grub.d)"/*.cfg; do
+		[[ -r $grub_config ]] || continue
+		sed -n 's/^[[:space:]]*GRUB_TOP_LEVEL[[:space:]]*=[[:space:]]*//p' "$grub_config"
+	done
+)
+grub_top_level=${grub_top_level#\"}
+grub_top_level=${grub_top_level%\"}
+grub_top_level=${grub_top_level#\'}
+grub_top_level=${grub_top_level%\'}
+configured_kernel=${grub_top_level#/boot/vmlinuz-}
+configured_vmlinuz=$(ybv_path "$grub_top_level")
+configured_initrd=$(ybv_path "/boot/initrd.img-$configured_kernel")
+if [[ $grub_top_level == /boot/vmlinuz-*yogabook* && $configured_kernel == "$kernel" &&
+	-s $configured_vmlinuz && -s $configured_initrd ]]; then
+	ybv_emit platform grub-default PASS 'Persistent GRUB top-level selects the running Yoga Book kernel' \
+		"GRUB_TOP_LEVEL=$grub_top_level kernel=$kernel"
+elif [[ $YBV_SYSROOT == / ]] && ybv_has_command grub-editenv; then
 	grub_env=$(grub-editenv list 2>/dev/null || true)
 	if grep -Eq '^saved_entry=.*yogabook' <<<"$grub_env"; then
-		ybv_emit platform grub-default PASS 'Persistent GRUB entry selects a Yoga Book kernel' "$(grep '^saved_entry=' <<<"$grub_env")"
+		ybv_emit platform grub-default PASS 'Persistent GRUB saved entry selects a Yoga Book kernel' \
+			"$(grep '^saved_entry=' <<<"$grub_env")"
 	else
-		ybv_emit platform grub-default WARN 'Persistent GRUB entry is not confirmed as Yoga Book' "$grub_env"
+		ybv_emit platform grub-default WARN 'Persistent GRUB entry is not confirmed as the running Yoga Book kernel' \
+			"GRUB_TOP_LEVEL=${grub_top_level:-unset} kernel=$kernel ${grub_env:-grubenv-empty}"
 	fi
 else
-	ybv_emit platform grub-default SKIP 'grub-editenv is unavailable'
+	ybv_emit platform grub-default WARN 'Persistent GRUB top-level is missing, incomplete or does not match the running kernel' \
+		"GRUB_TOP_LEVEL=${grub_top_level:-unset} kernel=$kernel"
 fi
 
 check_package() {

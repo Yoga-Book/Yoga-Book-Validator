@@ -227,6 +227,7 @@ grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_vali
 grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
 grep -Fq 'check_package yogabook-validator platform "$YBV_VERSION"' "$root/libexec/yogabook-validator-check.sh"
+grep -Fq 'Persistent GRUB top-level selects the running Yoga Book kernel' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'check_package yogabook-camera camera 0.2.20' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq 'check_package yogabook-gnss gnss 1.0.3' "$root/libexec/yogabook-validator-check.sh"
 grep -Fq "check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook3'" "$root/libexec/yogabook-validator-check.sh"
@@ -517,10 +518,14 @@ mkdir -p "$fake/sys/class/dmi/id" "$fake/proc/asound/card7" "$fake/proc/bus/inpu
 	"$fake/sys/bus/pci/drivers/xhci_hcd" "$fake/dev" "$fake/run/thermald" \
 	"$fake/sys/class/hwmon/hwmon0" "$fake/sys/class/hwmon/hwmon1" \
 	"$fake/sys/class/hwmon/hwmon2" "$fake/sys/class/thermal/thermal_zone0" \
-	"$fake/proc/sys/kernel/random" \
+	"$fake/proc/sys/kernel/random" "$fake/etc/default/grub.d" "$fake/boot" \
 	"$fake/sys/module/snd_intel_dspcfg/parameters"
 printf 'LenovoYB1-X91L\n' >"$fake/sys/class/dmi/id/product_name"
 printf 'LENOVO\n' >"$fake/sys/class/dmi/id/sys_vendor"
+test_kernel=7.2.0-yogabook-test
+printf 'GRUB_TOP_LEVEL=/boot/vmlinuz-%s\n' "$test_kernel" >"$fake/etc/default/grub.d/60-yogabook.cfg"
+printf 'kernel\n' >"$fake/boot/vmlinuz-$test_kernel"
+printf 'initrd\n' >"$fake/boot/initrd.img-$test_kernel"
 printf 'boot-one\n' >"$fake/proc/sys/kernel/random/boot_id"
 printf 'snd_sof 0 0 - Live 0x0\n' >"$fake/proc/modules"
 printf '0\n' >"$fake/sys/module/snd_intel_dspcfg/parameters/dsp_driver"
@@ -605,9 +610,10 @@ printf 'connected\n' >"$fake/sys/class/drm/card1-DSI-1/status"
 printf 'enabled\n' >"$fake/sys/class/drm/card1-DSI-1/enabled"
 printf '1200x1920\n' >"$fake/sys/class/drm/card1-DSI-1/modes"
 touch "$fake/dev/halo_keyboard" "$fake/dev/video0"
-YBV_SYSROOT="$fake" YBV_LIBEXEC_DIR="$root/libexec" \
+YBV_SYSROOT="$fake" YBV_KERNEL_RELEASE="$test_kernel" YBV_LIBEXEC_DIR="$root/libexec" \
 	"$root/src/yogabook-validator.sh" check --output "$temporary/check" || true
 grep -Fq $'platform\tdmi\tPASS' "$temporary/check/results.tsv"
+grep -Fq $'platform\tgrub-default\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'audio\talsa-card\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'input\thalo-keyboard\tPASS' "$temporary/check/results.tsv"
 grep -Fq $'input\thalo-touchpad\tPASS' "$temporary/check/results.tsv"
