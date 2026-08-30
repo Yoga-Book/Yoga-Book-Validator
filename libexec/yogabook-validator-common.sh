@@ -3,13 +3,17 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.35.0
+YBV_VERSION=0.36.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
 YBV_FAILURES=0
 YBV_WARNINGS=0
 YBV_AUTO_REPORT_OWNER=
+YBV_FINAL_ROLLUP_CHECK_ID=
+YBV_FINAL_ROLLUP_DETAILS=
+YBV_FINAL_ROLLUP_STATUS=
+YBV_FINAL_ROLLUP_SUMMARY=
 YBV_RESTORE_CALLBACK=
 YBV_STATE_BEFORE=
 YBV_STATE_AFTER=
@@ -254,9 +258,19 @@ ybv_emit() {
 }
 
 ybv_finish_report() {
-	local automated=${1:-true} result=PASS
+	local automated=${1:-true} result=PASS state_rc=0 rollup_status
 	local renderer=${YBV_REPORT_RENDERER:-$YBV_COMMON_DIR/yogabook-validator-report.py}
-	ybv_verify_state_preservation || true
+	ybv_verify_state_preservation || state_rc=$?
+	if [[ -n $YBV_FINAL_ROLLUP_CHECK_ID ]]; then
+		rollup_status=$YBV_FINAL_ROLLUP_STATUS
+		if ((state_rc != 0)); then
+			rollup_status=FAIL
+			YBV_FINAL_ROLLUP_SUMMARY="${YBV_FINAL_ROLLUP_SUMMARY}; original state was not preserved"
+			YBV_FINAL_ROLLUP_DETAILS="${YBV_FINAL_ROLLUP_DETAILS:+$YBV_FINAL_ROLLUP_DETAILS }state-preservation=FAIL"
+		fi
+		ybv_emit suite "$YBV_FINAL_ROLLUP_CHECK_ID" "$rollup_status" \
+			"$YBV_FINAL_ROLLUP_SUMMARY" "$YBV_FINAL_ROLLUP_DETAILS"
+	fi
 	if ((YBV_FAILURES > 0)); then
 		result=FAIL
 	fi

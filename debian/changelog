@@ -1,3 +1,13 @@
+yogabook-validator (0.36.0) unstable; urgency=medium
+
+  * Emit direct SD write-test rollups required by the acceptance matrix instead
+    of leaving successful standalone runs incorrectly marked as not run.
+  * Keep mixed pass/skip write coverage incomplete and fail the rollup whenever
+    any partition, cleanup or final state-preservation check fails.
+  * Add regression coverage for functional SD acceptance from dossier evidence.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 07:10:00 +0200
+
 yogabook-validator (0.35.0) unstable; urgency=medium
 
   * Preserve conservative whole-device acceptance while reporting structural,

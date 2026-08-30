@@ -64,6 +64,10 @@ done
 if [[ -z $sd_name ]]; then
 	if [[ $write_test == true ]]; then
 		ybv_emit storage sd-card SKIP 'No SD card is inserted; write transport was not tested'
+		YBV_FINAL_ROLLUP_CHECK_ID=storage-write
+		YBV_FINAL_ROLLUP_STATUS=SKIP
+		YBV_FINAL_ROLLUP_SUMMARY='Bounded SD write validation was incomplete'
+		YBV_FINAL_ROLLUP_DETAILS='partitions-passed=0 skipped=1'
 	else
 		ybv_emit storage sd-card SKIP 'No SD card is inserted; read transport was not tested'
 	fi
@@ -187,6 +191,26 @@ if [[ -n $active_mount || -n $active_test_file ]]; then
 	else
 		ybv_emit storage state-restore FAIL 'Temporary SD test state remains after cleanup retries'
 	fi
+fi
+
+if [[ $write_test == true ]]; then
+	write_failures=$(awk -F '\t' '$2 == "storage" && $4 == "FAIL" {count++} END {print count+0}' "$YBV_REPORT")
+	write_skips=$(awk -F '\t' '$2 == "storage" && $4 == "SKIP" {count++} END {print count+0}' "$YBV_REPORT")
+	write_passes=$(awk -F '\t' '$2 == "storage" && $3 ~ /^partition-/ && $4 == "PASS" {count++} END {print count+0}' "$YBV_REPORT")
+	if ((write_failures > 0)); then
+		YBV_FINAL_ROLLUP_STATUS=FAIL
+		YBV_FINAL_ROLLUP_SUMMARY='Bounded SD write validation failed'
+		YBV_FINAL_ROLLUP_DETAILS="partitions-passed=$write_passes failures=$write_failures skipped=$write_skips"
+	elif ((write_passes == 0 || write_skips > 0)); then
+		YBV_FINAL_ROLLUP_STATUS=SKIP
+		YBV_FINAL_ROLLUP_SUMMARY='Bounded SD write validation was incomplete'
+		YBV_FINAL_ROLLUP_DETAILS="partitions-passed=$write_passes skipped=$write_skips"
+	else
+		YBV_FINAL_ROLLUP_STATUS=PASS
+		YBV_FINAL_ROLLUP_SUMMARY='Every writable SD filesystem passed the bounded write validation'
+		YBV_FINAL_ROLLUP_DETAILS="partitions-passed=$write_passes"
+	fi
+	YBV_FINAL_ROLLUP_CHECK_ID=storage-write
 fi
 
 if [[ -z $active_mount && -z $active_test_file ]]; then trap - EXIT INT TERM; fi

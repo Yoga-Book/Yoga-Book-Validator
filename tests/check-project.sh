@@ -146,6 +146,36 @@ printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
 	export YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py"
 	# shellcheck source=../libexec/yogabook-validator-common.sh
 	. "$root/libexec/yogabook-validator-common.sh"
+	ybv_begin_report final-rollup-pass "$temporary/final-rollup-pass"
+	YBV_FINAL_ROLLUP_CHECK_ID=storage-write
+	YBV_FINAL_ROLLUP_STATUS=PASS
+	YBV_FINAL_ROLLUP_SUMMARY='Synthetic write validation passed'
+	YBV_FINAL_ROLLUP_DETAILS='partitions-passed=2'
+	ybv_finish_report
+)
+grep -Eq $'suite\tstorage-write\tPASS\t' "$temporary/final-rollup-pass/results.tsv"
+(
+	export YBV_SYSROOT="$state_guard_root"
+	export YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py"
+	# shellcheck source=../libexec/yogabook-validator-common.sh
+	. "$root/libexec/yogabook-validator-common.sh"
+	ybv_begin_report final-rollup-failure "$temporary/final-rollup-failure"
+	YBV_FINAL_ROLLUP_CHECK_ID=storage-write
+	YBV_FINAL_ROLLUP_STATUS=PASS
+	YBV_FINAL_ROLLUP_SUMMARY='Synthetic write validation passed'
+	YBV_FINAL_ROLLUP_DETAILS='partitions-passed=2'
+	printf '11\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
+	finish_rc=0
+	ybv_finish_report || finish_rc=$?
+	[[ $finish_rc -eq 1 ]]
+)
+grep -Eq $'suite\tstorage-write\tFAIL\t.*state-preservation=FAIL' "$temporary/final-rollup-failure/results.tsv"
+printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"
+(
+	export YBV_SYSROOT="$state_guard_root"
+	export YBV_REPORT_RENDERER="$root/libexec/yogabook-validator-report.py"
+	# shellcheck source=../libexec/yogabook-validator-common.sh
+	. "$root/libexec/yogabook-validator-common.sh"
 	# Passed by name to ybv_register_restore_callback.
 	# shellcheck disable=SC2329
 	restore_test_panel() { printf '10\n' >"$state_guard_root/sys/class/backlight/panel/brightness"; }
@@ -416,7 +446,7 @@ snapshot_service_line=$(grep -n -F 'for unit in halo-keyboard.service yogabook-c
 snapshot_mount_line=$(grep -n -F "printf 'temporary:validator-mounts" "$root/libexec/yogabook-validator-common.sh" | cut -d: -f1)
 [[ -n $snapshot_service_line && -n $snapshot_mount_line ]]
 ((snapshot_service_line > snapshot_mount_line))
-grep -Fq 'ybv_verify_state_preservation || true' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'ybv_verify_state_preservation || state_rc=$?' "$root/libexec/yogabook-validator-common.sh"
 for restoring_runner in active camera lights storage wireless; do
 	grep -Fq 'ybv_register_restore_callback' "$root/libexec/yogabook-validator-$restoring_runner.sh"
 done
@@ -520,6 +550,10 @@ grep -Fq 'bs=64K count=1 conv=fsync' "$root/libexec/yogabook-validator-storage.s
 grep -Fq '.yogabook-validator-write-test.XXXXXX' "$root/libexec/yogabook-validator-storage.sh"
 # shellcheck disable=SC2016
 grep -Fq 'sync -f "$mount_dir"' "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq "YBV_FINAL_ROLLUP_SUMMARY='Every writable SD filesystem passed the bounded write validation'" "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq "YBV_FINAL_ROLLUP_SUMMARY='Bounded SD write validation was incomplete'" "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq "YBV_FINAL_ROLLUP_SUMMARY='Bounded SD write validation failed'" "$root/libexec/yogabook-validator-storage.sh"
+grep -Fq 'state-preservation=FAIL' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq 'storage-write' "$root/libexec/yogabook-validator-active.sh"
 if grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-automated.sh"; then
 	echo 'explicit SD write validation must not be part of automated' >&2

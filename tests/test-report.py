@@ -163,6 +163,19 @@ class ReportRendererTest(unittest.TestCase):
         self.assertEqual(model["acceptance"]["summary"]["layers"]["functional"]["components_complete"], 1)
         self.assertEqual(model["acceptance"]["summary"]["layers"]["physical"]["components_complete"], 1)
 
+    def test_sd_write_rollup_completes_functional_layer(self) -> None:
+        with (self.report / "results.tsv").open("a", encoding="utf-8") as stream:
+            stream.write(
+                "2026-08-29T10:00:05+02:00\tstorage\tsd-slot\tPASS\tSD slot exposed\t\n"
+                "2026-08-29T10:00:05+02:00\tstorage\tsd-card\tPASS\tSD card present\t\n"
+                "2026-08-29T10:00:06+02:00\tstorage\tsd-block-read\tPASS\tSD block read passed\t\n"
+                "2026-08-29T10:00:07+02:00\tsuite\tstorage-write\tPASS\tSD writes passed\t\n"
+            )
+        subprocess.run([sys.executable, str(RENDERER), str(self.report)], check=True)
+        model = json.loads((self.report / "report.json").read_text(encoding="utf-8"))
+        sd = next(item for item in model["acceptance"]["components"] if item["id"] == "sd-card")
+        self.assertEqual(sd["layers"]["functional"]["status"], "PASS")
+
 
 if __name__ == "__main__":
     unittest.main()
