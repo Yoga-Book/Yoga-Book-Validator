@@ -1,3 +1,14 @@
+yogabook-validator (0.37.0) unstable; urgency=medium
+
+  * Cap active speaker and headset probes at a maximum -16 dB PCM master and
+    0 dB codec DAC gain without raising quieter existing user values.
+  * Verify both temporary caps before opening an audible stream and abort
+    playback fail-closed if either control cannot be read, applied or confirmed.
+  * Restore the original controls through the existing ALSA and global-state
+    safeguards and document the bounded physical playback level.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 07:28:00 +0200
+
 yogabook-validator (0.36.0) unstable; urgency=medium
 
   * Emit direct SD write-test rollups required by the acceptance matrix instead

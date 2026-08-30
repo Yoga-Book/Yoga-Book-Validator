@@ -546,6 +546,40 @@ else
 	ybv_emit audio ucm-routes FAIL 'Could not enable UCM audio routes'
 fi
 
+if [[ $action != suspend ]]; then
+	master_left='' master_right='' dac_left='' dac_right=''
+	read -r master_left master_right < <(
+		amixer -c yogabook cget name='1 Master Playback Volume' 2>>"$YBV_LOG" |
+			sed -n 's/.*values=\([0-9][0-9]*\),\([0-9][0-9]*\).*/\1 \2/p'
+	) || true
+	read -r dac_left dac_right < <(
+		amixer -c yogabook cget name='DAC1 Playback Volume' 2>>"$YBV_LOG" |
+			sed -n 's/.*values=\([0-9][0-9]*\),\([0-9][0-9]*\).*/\1 \2/p'
+	) || true
+	if [[ $master_left =~ ^[0-9]+$ && $master_right =~ ^[0-9]+$ &&
+		$dac_left =~ ^[0-9]+$ && $dac_right =~ ^[0-9]+$ ]]; then
+		((master_left > 24)) && master_left=24
+		((master_right > 24)) && master_right=24
+		((dac_left > 87)) && dac_left=87
+		((dac_right > 87)) && dac_right=87
+	fi
+	if [[ $master_left =~ ^[0-9]+$ && $master_right =~ ^[0-9]+$ &&
+		$dac_left =~ ^[0-9]+$ && $dac_right =~ ^[0-9]+$ ]] &&
+		amixer -c yogabook cset name='1 Master Playback Volume' "$master_left,$master_right" >>"$YBV_LOG" 2>&1 &&
+		amixer -c yogabook cset name='DAC1 Playback Volume' "$dac_left,$dac_right" >>"$YBV_LOG" 2>&1 &&
+		amixer -c yogabook cget name='1 Master Playback Volume' 2>>"$YBV_LOG" |
+			grep -Fq "values=$master_left,$master_right" &&
+		amixer -c yogabook cget name='DAC1 Playback Volume' 2>>"$YBV_LOG" |
+			grep -Fq "values=$dac_left,$dac_right"; then
+		ybv_emit audio playback-level-cap PASS 'Capped active-test playback below the saved user level' \
+			"master=$master_left,$master_right/32 (max -16 dB) dac1=$dac_left,$dac_right/127 (max 0 dB) tone=8%"
+	else
+		ybv_emit audio playback-level-cap FAIL 'Could not enforce the bounded active-test playback level'
+		ybv_finish_report
+		exit 1
+	fi
+fi
+
 if [[ $action == suspend ]]; then
 	if amixer -c yogabook cset name='Speaker Switch' off >>"$YBV_LOG" 2>&1 &&
 		amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(off|0)'; then

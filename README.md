@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.36.0_all.deb
+sudo apt install ../yogabook-validator_0.37.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -165,7 +165,10 @@ Saving before WirePlumber stops is essential: closing the UCM session can
 temporarily disable `Speaker Switch`, and persisting that transient state would
 leave the tablet silent.
 
-The tone is a bounded one-second 440 Hz WAV at 8% digital amplitude. Transport
+The tone is a bounded one-second 440 Hz WAV at 8% digital amplitude. Before an
+audible speaker or headset probe, the Validator caps the PCM master at -16 dB
+and the codec DAC at 0 dB without ever raising a quieter existing value. If
+either cap cannot be read, applied and verified, playback is aborted. Transport
 matrix playback uses digital silence. Suspend validation also disables the
 physical speaker route while its direct stream crosses sleep, then restores
 the saved mixer state. Report bundles exclude WAV recordings

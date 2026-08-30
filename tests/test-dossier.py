@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOSSIER = ROOT / "libexec" / "yogabook-validator-dossier.py"
 RENDERER = ROOT / "libexec" / "yogabook-validator-report.py"
 MATRIX = ROOT / "data" / "acceptance.json"
-VERSION = "0.36.0"
+VERSION = "0.37.0"
 
 
 class DossierTest(unittest.TestCase):
@@ -146,7 +146,7 @@ class DossierTest(unittest.TestCase):
         )
         completed = self.run_dossier(self.root / "version-output", good, wrong_version, check=False)
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("does not match 0.36.0", completed.stderr)
+        self.assertIn("does not match 0.37.0", completed.stderr)
 
         other_device = self.make_source(
             "other-device",
