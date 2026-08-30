@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.43.0
+YBV_VERSION=0.44.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -144,6 +144,21 @@ ybv_canonical_system_service_state() {
 	fi
 }
 
+ybv_bluetooth_rfkill_blocked() {
+	local class_dir=$1 directory type soft hard
+	[[ -d $class_dir ]] || return 1
+	for directory in "$class_dir"/*; do
+		[[ -e $directory && -r $directory/type ]] || continue
+		type=$(<"$directory/type")
+		[[ $type == bluetooth ]] || continue
+		soft=$([[ -r $directory/soft ]] && cat "$directory/soft" || printf 0)
+		hard=$([[ -r $directory/hard ]] && cat "$directory/hard" || printf 0)
+		[[ $soft == 1 || $hard == 1 ]]
+		return
+	done
+	return 1
+}
+
 ybv_capture_state_snapshot() {
 	local output=$1 temporary real_user user_uid unit state restarts source fstype options
 	local sysroot=${YBV_SYSROOT%/}
@@ -196,7 +211,11 @@ ybv_capture_state_snapshot() {
 						}
 					' || true
 			fi
-			if command -v bluetoothctl >/dev/null 2>&1; then
+			if ybv_bluetooth_rfkill_blocked "$sysroot/sys/class/rfkill"; then
+				# rfkill policy is authoritative while blocked. BlueZ may expose
+				# Powered=yes briefly before the asynchronous power-off completes.
+				printf 'bluetooth:controller\tpolicy=blocked\n'
+			elif command -v bluetoothctl >/dev/null 2>&1; then
 				state=$(timeout 5 bluetoothctl show </dev/null 2>/dev/null |
 					awk '
 						/^[[:space:]]*(Powered|Discovering):/ {

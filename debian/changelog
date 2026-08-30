@@ -1,3 +1,12 @@
+yogabook-validator (0.44.0) unstable; urgency=medium
+
+  * Treat rfkill policy as authoritative while Bluetooth is blocked, avoiding
+    false state-preservation failures during BlueZ's asynchronous power-off.
+  * Keep strict controller power and discovery comparison while Bluetooth is
+    unblocked, and cover both rfkill paths with regression tests.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 17:20:00 +0200
+
 yogabook-validator (0.43.0) unstable; urgency=medium
 
   * Negotiate the front-camera BG10 ABI used by the reviewed kernel while

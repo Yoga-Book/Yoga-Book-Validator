@@ -219,6 +219,13 @@ test ! -e "$temporary/state-guard-async-halo/state-diff.txt"
 		'state=activating/restarting restarts=volatile' ]]
 	[[ $(ybv_canonical_system_service_state active/running 0) == \
 		'state=active/running restarts=0' ]]
+	mkdir -p "$temporary/rfkill/rfkill0"
+	printf 'bluetooth\n' >"$temporary/rfkill/rfkill0/type"
+	printf '1\n' >"$temporary/rfkill/rfkill0/soft"
+	printf '0\n' >"$temporary/rfkill/rfkill0/hard"
+	ybv_bluetooth_rfkill_blocked "$temporary/rfkill"
+	printf '0\n' >"$temporary/rfkill/rfkill0/soft"
+	! ybv_bluetooth_rfkill_blocked "$temporary/rfkill"
 )
 python3 - <<PY
 import ast
