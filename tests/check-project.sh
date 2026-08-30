@@ -210,6 +210,16 @@ printf '8\n' >"$state_guard_root/sys/class/leds/ybwmi::kbd_backlight/brightness"
 )
 grep -Eq $'validator\tstate-preservation\tPASS\t' "$temporary/state-guard-async-halo/results.tsv"
 test ! -e "$temporary/state-guard-async-halo/state-diff.txt"
+(
+	# shellcheck source=../libexec/yogabook-validator-common.sh
+	. "$root/libexec/yogabook-validator-common.sh"
+	[[ $(ybv_canonical_system_service_state activating/start 558) == \
+		'state=activating/restarting restarts=volatile' ]]
+	[[ $(ybv_canonical_system_service_state activating/auto-restart 559) == \
+		'state=activating/restarting restarts=volatile' ]]
+	[[ $(ybv_canonical_system_service_state active/running 0) == \
+		'state=active/running restarts=0' ]]
+)
 python3 - <<PY
 import ast
 import xml.etree.ElementTree as ET
@@ -579,6 +589,8 @@ grep -Fq "YBV_FINAL_ROLLUP_SUMMARY='Every writable SD filesystem passed the boun
 grep -Fq "YBV_FINAL_ROLLUP_SUMMARY='Bounded SD write validation was incomplete'" "$root/libexec/yogabook-validator-storage.sh"
 grep -Fq "YBV_FINAL_ROLLUP_SUMMARY='Bounded SD write validation failed'" "$root/libexec/yogabook-validator-storage.sh"
 grep -Fq 'state-preservation=FAIL' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'preexisting-service-instability WARN' "$root/libexec/yogabook-validator-common.sh"
+grep -Fq 'state=activating/restarting restarts=volatile' "$root/libexec/yogabook-validator-common.sh"
 grep -Fq 'storage-write' "$root/libexec/yogabook-validator-active.sh"
 if grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-automated.sh"; then
 	echo 'explicit SD write validation must not be part of automated' >&2
@@ -615,6 +627,8 @@ if grep -Fq 'discovery_output" >>"$YBV_LOG"' "$root/libexec/yogabook-validator-w
 	exit 1
 fi
 grep -Fq 'restore_route || restore_rc=1' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq 'original_pixel_format=' "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq -- '--set-fmt-video="width=$original_width,height=$original_height,pixelformat=$original_pixel_format"' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq 'camera tests require root access to private AtomISP devices' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq 'systemctl stop "$camera_service"' "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq 'systemctl start --no-block "$camera_service"' "$root/libexec/yogabook-validator-camera.sh"
@@ -632,7 +646,7 @@ grep -Fq -- '--stream-to=-' "$root/libexec/yogabook-validator-camera-capture.py"
 grep -Fq 'actual_frame_bytes=' "$root/libexec/yogabook-validator-camera-capture.py"
 grep -Fq 'selectors.DefaultSelector()' "$root/libexec/yogabook-validator-camera-capture.py"
 grep -Fq 'atomisp_run_mode=2' "$root/libexec/yogabook-validator-camera.sh"
-grep -Fq "test_camera front 'Front camera' 0 ov2740 BA10 1932 1092 4096 4472832" "$root/libexec/yogabook-validator-camera.sh"
+grep -Fq "test_camera front 'Front camera' 0 ov2740 BG10,BA10 1932 1092 4096 4472832" "$root/libexec/yogabook-validator-camera.sh"
 grep -Fq "test_camera rear 'Rear camera' 1 ov8858 BG10 1632 1224 3328 4075520" "$root/libexec/yogabook-validator-camera.sh"
 if grep -Eq -- '--stream-to=[^ -]|open\(.+wb|write_bytes' "$root/libexec/yogabook-validator-camera-capture.py"; then
 	echo 'camera validation must never store captured image data' >&2

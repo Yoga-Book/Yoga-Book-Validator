@@ -1,3 +1,14 @@
+yogabook-validator (0.43.0) unstable; urgency=medium
+
+  * Negotiate the front-camera BG10 ABI used by the reviewed kernel while
+    retaining validation of the previous BA10 fallback.
+  * Snapshot, restore and verify the original AtomISP input, raw geometry and
+    FourCC in addition to the focus position, run mode and camera service.
+  * Report a service already in an automatic restart cycle as a pre-existing
+    warning without misattributing its natural restart-count drift to the test.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 16:45:00 +0200
+
 yogabook-validator (0.42.0) unstable; urgency=medium
 
   * Translate acceptance selectors into concrete operator actions for cold boot,

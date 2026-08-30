@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.42.0
+YBV_VERSION=0.43.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -38,7 +38,7 @@ ybv_sanitize() {
 
 ybv_begin_report() {
 	local command_name=$1 requested_dir=${2:-}
-	local timestamp report_owner generated_default=false
+	local timestamp report_owner unstable_services generated_default=false
 	timestamp=$(date +%Y%m%d-%H%M%S)
 	if [[ -n $requested_dir ]]; then
 		YBV_REPORT_DIR=$requested_dir
@@ -79,6 +79,15 @@ ybv_begin_report() {
 	} >"$YBV_LOG"
 	if ! ybv_capture_state_snapshot "$YBV_STATE_BEFORE"; then
 		printf 'STATE_SNAPSHOT_ERROR: initial state capture failed\n' | tee -a "$YBV_LOG" >&2
+	else
+		unstable_services=$(awk -F '[:\t]' '
+			$1 == "system-service" && $3 ~ /^state=activating\/restarting / {print $2}
+		' "$YBV_STATE_BEFORE" | paste -sd, -)
+		if [[ -n $unstable_services ]]; then
+			ybv_emit validator preexisting-service-instability WARN \
+				'One or more integration services were already restarting before this test' \
+				"services=$unstable_services"
+		fi
 	fi
 }
 
@@ -123,6 +132,16 @@ ybv_snapshot_led_state() {
 			printf 'sysfs:%s:brightness\t%s\n' "$name" "$(ybv_sanitize "$brightness")"
 		fi
 	done
+}
+
+ybv_canonical_system_service_state() {
+	local state=$1 restarts=$2
+	if [[ $restarts =~ ^[0-9]+$ ]] && ((restarts > 0)) && \
+		[[ $state == activating/start || $state == activating/auto-restart ]]; then
+		printf 'state=activating/restarting restarts=volatile\n'
+	else
+		printf 'state=%s restarts=%s\n' "$state" "${restarts:-unknown}"
+	fi
 }
 
 ybv_capture_state_snapshot() {
@@ -205,7 +224,8 @@ ybv_capture_state_snapshot() {
 				iio-sensor-proxy.service bluetooth.service ModemManager.service; do
 				state=$(systemctl show "$unit" --property=ActiveState,SubState --value 2>/dev/null | tr '\n' '/' || true)
 				restarts=$(systemctl show "$unit" --property=NRestarts --value 2>/dev/null || true)
-				printf 'system-service:%s\tstate=%s restarts=%s\n' "$unit" "${state%/}" "${restarts:-unknown}"
+				printf 'system-service:%s\t%s\n' "$unit" \
+					"$(ybv_canonical_system_service_state "${state%/}" "$restarts")"
 			done
 		fi
 	} | LC_ALL=C sort >"$temporary"

@@ -129,14 +129,39 @@ link_enabled 1 && rear_was_enabled=true
 original_run_mode=
 original_input=$(v4l2-ctl -d "$video_device" --get-input 2>>"$YBV_LOG" |
 	sed -n 's/^Video input[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)
+original_video_format=$(v4l2-ctl -d "$video_device" --get-fmt-video 2>>"$YBV_LOG" || true)
+original_width=$(sed -n 's/^[[:space:]]*Width\/Height[[:space:]]*:[[:space:]]*\([0-9][0-9]*\)\/[0-9][0-9]*/\1/p' <<<"$original_video_format")
+original_height=$(sed -n 's/^[[:space:]]*Width\/Height[[:space:]]*:[[:space:]]*[0-9][0-9]*\/\([0-9][0-9]*\)/\1/p' <<<"$original_video_format")
+original_pixel_format=$(sed -n "s/^[[:space:]]*Pixel Format[[:space:]]*:[[:space:]]*'\([^']\{4\}\)'.*/\1/p" <<<"$original_video_format")
 if [[ -n $isp_device && -e $isp_device ]]; then
 	original_run_mode=$(v4l2-ctl -d "$isp_device" --get-ctrl=atomisp_run_mode 2>>"$YBV_LOG" |
 		sed -n 's/^atomisp_run_mode:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
 fi
 
+if [[ ! $original_input =~ ^[0-9]+$ || ! $original_width =~ ^[0-9]+$ ||
+	! $original_height =~ ^[0-9]+$ || ! $original_pixel_format =~ ^....$ ]]; then
+	ybv_emit camera state-snapshot FAIL 'Could not snapshot the original AtomISP input and raw format'
+	ybv_finish_report_for_user "$real_user"
+	exit 1
+fi
+ybv_emit camera state-snapshot PASS 'Saved the original AtomISP input and raw format' \
+	"input=$original_input format=${original_width}x${original_height}:$original_pixel_format"
+
 restore_route() {
-	[[ $original_input =~ ^[0-9]+$ ]] || return 1
-	v4l2-ctl -d "$video_device" --set-input="$original_input" >>"$YBV_LOG" 2>&1
+	local current_format current_input
+	v4l2-ctl -d "$video_device" --set-input="$original_input" >>"$YBV_LOG" 2>&1 || return 1
+	if [[ -n $original_run_mode ]]; then
+		v4l2-ctl -d "$isp_device" --set-ctrl="atomisp_run_mode=$original_run_mode" >>"$YBV_LOG" 2>&1 || return 1
+	fi
+	v4l2-ctl -d "$video_device" \
+		--set-fmt-video="width=$original_width,height=$original_height,pixelformat=$original_pixel_format" \
+		>>"$YBV_LOG" 2>&1 || return 1
+	current_input=$(v4l2-ctl -d "$video_device" --get-input 2>>"$YBV_LOG" |
+		sed -n 's/^Video input[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)
+	current_format=$(v4l2-ctl -d "$video_device" --get-fmt-video 2>>"$YBV_LOG" || true)
+	[[ $current_input == "$original_input" ]] &&
+		grep -Eq "Width/Height[[:space:]]*:[[:space:]]*$original_width/$original_height" <<<"$current_format" &&
+		grep -Eq "Pixel Format[[:space:]]*:[[:space:]]*'$original_pixel_format'" <<<"$current_format"
 }
 focus_original=
 focus_changed=false
@@ -155,9 +180,6 @@ restore_camera_state() {
 	[[ $camera_state_restored == true ]] && return 0
 	restore_focus || restore_rc=1
 	restore_route || restore_rc=1
-	if [[ -n $original_run_mode ]]; then
-		v4l2-ctl -d "$isp_device" --set-ctrl="atomisp_run_mode=$original_run_mode" >>"$YBV_LOG" 2>&1 || restore_rc=1
-	fi
 	restore_camera_service || restore_rc=1
 	[[ $restore_rc -ne 0 ]] || camera_state_restored=true
 	return "$restore_rc"
@@ -172,9 +194,21 @@ select_route() {
 	v4l2-ctl -d "$video_device" --set-input="$port" >>"$YBV_LOG" 2>&1
 }
 
+select_pixel_format() {
+	local candidates=$1 listing candidate
+	listing=$(v4l2-ctl -d "$video_device" --list-formats-ext 2>>"$YBV_LOG" || true)
+	for candidate in ${candidates//,/ }; do
+		if grep -Fq "'$candidate'" <<<"$listing"; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
 test_camera() {
-	local id=$1 label=$2 port=$3 expected=$4 pixel_format=$5 width=$6 height=$7 stride=$8 frame_size=$9
-	local input
+	local id=$1 label=$2 port=$3 expected=$4 pixel_formats=$5 width=$6 height=$7 stride=$8 frame_size=$9
+	local input pixel_format
 	local capture_result stream_status signal_status stream_details signal_details
 	if ! select_route "$port"; then
 		ybv_emit camera "$id-route" FAIL "Could not select the $label route"
@@ -192,6 +226,15 @@ test_camera() {
 	else
 		ybv_emit camera "$id-route" FAIL "$label route did not select $expected" "$input"
 	fi
+	pixel_format=$(select_pixel_format "$pixel_formats" || true)
+	if [[ -z $pixel_format ]]; then
+		ybv_emit camera "$id-format" FAIL "$label did not expose an accepted raw Bayer format" "expected=$pixel_formats"
+		ybv_emit camera "$id-stream" SKIP "$label frame capture was not attempted"
+		ybv_emit camera "$id-signal" SKIP "$label signal integrity was not analyzed"
+		return
+	fi
+	ybv_emit camera "$id-format" PASS "$label exposes a supported raw Bayer format" \
+		"selected=$pixel_format accepted=$pixel_formats"
 	capture_result=$(python3 "$LIBEXEC_DIR/yogabook-validator-camera-capture.py" \
 		"$video_device" "$width" "$height" "$stride" "$frame_size" 3 "$pixel_format" 2>>"$YBV_LOG" || true)
 	IFS=$'\t' read -r stream_status signal_status stream_details signal_details <<<"$capture_result"
@@ -256,7 +299,7 @@ test_focus() {
 	fi
 }
 
-test_camera front 'Front camera' 0 ov2740 BA10 1932 1092 4096 4472832
+test_camera front 'Front camera' 0 ov2740 BG10,BA10 1932 1092 4096 4472832
 test_camera rear 'Rear camera' 1 ov8858 BG10 1632 1224 3328 4075520
 test_focus
 
