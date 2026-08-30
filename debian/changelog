@@ -1,3 +1,13 @@
+yogabook-validator (0.41.0) unstable; urgency=medium
+
+  * Show failed, warned, skipped and incomplete selector evidence directly in
+    every HTML acceptance-layer cell instead of displaying an unexplained state.
+  * Add a dedicated HTML acceptance-blockers section matching the complete
+    actionable detail already available in Markdown and JSON reports.
+  * Cover missing selectors and failed evidence in rendered-report tests.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 08:50:00 +0200
+
 yogabook-validator (0.40.0) unstable; urgency=medium
 
   * Report the automated GNSS final-state roll-up as not applicable when the

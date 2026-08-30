@@ -474,6 +474,17 @@ def markdown_escape(value: Any) -> str:
     return rendered
 
 
+def acceptance_layer_blockers(layer: dict[str, Any]) -> list[str]:
+    details = list(layer["missing_selectors"])
+    details.extend(f"unimplemented: {selector}" for selector in layer["unimplemented_selectors"])
+    details.extend(
+        f"{item['selector']}={item['status']}"
+        for item in layer["evidence"]
+        if item["status"] != "PASS"
+    )
+    return details
+
+
 def render_markdown(model: dict[str, Any]) -> str:
     run = model["run"]
     summary = model["summary"]
@@ -532,13 +543,7 @@ def render_markdown(model: dict[str, Any]) -> str:
             layer = component["layers"][layer_name]
             if layer["status"] == "PASS":
                 continue
-            details = list(layer["missing_selectors"])
-            details.extend(f"unimplemented: {selector}" for selector in layer["unimplemented_selectors"])
-            details.extend(
-                f"{item['selector']}={item['status']}"
-                for item in layer["evidence"]
-                if item["status"] != "PASS"
-            )
+            details = acceptance_layer_blockers(layer)
             blockers.append(f"{layer_name} {layer['status']}: {', '.join(details) or 'review evidence'}")
         lines.append(f"- **{markdown_escape(component['name'])}** — {markdown_escape('; '.join(blockers))}")
     lines.extend([
@@ -621,12 +626,29 @@ def render_html(model: dict[str, Any]) -> str:
         f"<td><span class='badge {item['status'].lower().replace('_', '-')}'>{html.escape(item['status'])}</span></td>"
         + "".join(
             f"<td><span class='badge {item['layers'][layer]['status'].lower().replace('_', '-')}'>{html.escape(item['layers'][layer]['status'])}</span>"
-            f"<small>{html.escape(', '.join(item['layers'][layer]['missing_selectors'] + ['unimplemented: ' + selector for selector in item['layers'][layer]['unimplemented_selectors']]))}</small></td>"
+            f"<small>{html.escape(', '.join(acceptance_layer_blockers(item['layers'][layer])))}</small></td>"
             for layer in ACCEPTANCE_LAYERS
         )
         + "</tr>"
         for item in acceptance["components"]
     )
+    acceptance_blockers = []
+    for component in acceptance["components"]:
+        if component["status"] == "PASS":
+            continue
+        layer_items = []
+        for layer_name in ACCEPTANCE_LAYERS:
+            layer = component["layers"][layer_name]
+            if layer["status"] == "PASS":
+                continue
+            details = ", ".join(acceptance_layer_blockers(layer)) or "review evidence"
+            layer_items.append(
+                f"<li><b>{html.escape(layer_name.title())} {html.escape(layer['status'])}</b>: "
+                f"{html.escape(details)}</li>"
+            )
+        acceptance_blockers.append(
+            f"<li><strong>{html.escape(component['name'])}</strong><ul>{''.join(layer_items)}</ul></li>"
+        )
     result_rows = "".join(
         f"<tr><td><span class='badge {row['status'].lower()}'>{row['status']}</span></td>"
         f"<td><code>{html.escape(row['subsystem'])}/{html.escape(row['check_id'])}</code></td>"
@@ -666,6 +688,7 @@ td small{{display:block;color:var(--muted);margin-top:4px;overflow-wrap:anywhere
 <div class='metric'><b>{readiness['components_complete']}/{readiness['components_total']}</b>Components accepted</div>{layer_metrics}</section>
 <h2>Device acceptance readiness · {readiness['readiness_percent']}%</h2><p class='muted'>A component is complete only when structural, functional and physical evidence all pass. Matrix SHA-256: <code>{html.escape(acceptance['matrix']['sha256'])}</code>.</p>
 <section class='panel table-wrap'><table><thead><tr><th>Component</th><th>Overall</th><th>Structural</th><th>Functional</th><th>Physical</th></tr></thead><tbody>{acceptance_rows}</tbody></table></section>
+<h2>Acceptance blockers</h2><section class='panel'><ul>{''.join(acceptance_blockers)}</ul></section>
 <h2>Priority findings</h2><section class='findings'>{''.join(finding_cards)}</section>
 <h2>Subsystem health</h2><section class='panel table-wrap'><table><thead><tr><th>Subsystem</th><th>Health</th><th>Pass</th><th>Fail</th><th>Warn</th><th>Skip</th></tr></thead><tbody>{subsystem_rows}</tbody></table></section>
 <h2>Run context</h2><section class='panel'><dl>{environment}</dl><p>Physical acceptance: <b>{html.escape(str(model['run']['physical_acceptance_result']))}</b></p></section>
