@@ -1,3 +1,13 @@
+yogabook-validator (0.38.0) unstable; urgency=medium
+
+  * Isolate the fail-closed stereo playback ceiling in a reusable helper shared
+    by every audible active workflow.
+  * Add executable mixer simulations proving per-channel caps never raise a
+    quieter value and reject malformed reads, failed writes and unverifiable
+    mixer state before playback can start.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 07:52:00 +0200
+
 yogabook-validator (0.37.0) unstable; urgency=medium
 
   * Cap active speaker and headset probes at a maximum -16 dB PCM master and

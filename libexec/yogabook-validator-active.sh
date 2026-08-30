@@ -5,6 +5,8 @@ set -Eeuo pipefail
 LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=yogabook-validator-common.sh
 . "$LIBEXEC_DIR/yogabook-validator-common.sh"
+# shellcheck source=yogabook-validator-audio-levels.sh
+. "$LIBEXEC_DIR/yogabook-validator-audio-levels.sh"
 
 [[ $EUID -eq 0 ]] || { echo 'ERROR: active tests must run as root' >&2; exit 2; }
 action=${1:-}
@@ -547,32 +549,9 @@ else
 fi
 
 if [[ $action != suspend ]]; then
-	master_left='' master_right='' dac_left='' dac_right=''
-	read -r master_left master_right < <(
-		amixer -c yogabook cget name='1 Master Playback Volume' 2>>"$YBV_LOG" |
-			sed -n 's/.*values=\([0-9][0-9]*\),\([0-9][0-9]*\).*/\1 \2/p'
-	) || true
-	read -r dac_left dac_right < <(
-		amixer -c yogabook cget name='DAC1 Playback Volume' 2>>"$YBV_LOG" |
-			sed -n 's/.*values=\([0-9][0-9]*\),\([0-9][0-9]*\).*/\1 \2/p'
-	) || true
-	if [[ $master_left =~ ^[0-9]+$ && $master_right =~ ^[0-9]+$ &&
-		$dac_left =~ ^[0-9]+$ && $dac_right =~ ^[0-9]+$ ]]; then
-		((master_left > 24)) && master_left=24
-		((master_right > 24)) && master_right=24
-		((dac_left > 87)) && dac_left=87
-		((dac_right > 87)) && dac_right=87
-	fi
-	if [[ $master_left =~ ^[0-9]+$ && $master_right =~ ^[0-9]+$ &&
-		$dac_left =~ ^[0-9]+$ && $dac_right =~ ^[0-9]+$ ]] &&
-		amixer -c yogabook cset name='1 Master Playback Volume' "$master_left,$master_right" >>"$YBV_LOG" 2>&1 &&
-		amixer -c yogabook cset name='DAC1 Playback Volume' "$dac_left,$dac_right" >>"$YBV_LOG" 2>&1 &&
-		amixer -c yogabook cget name='1 Master Playback Volume' 2>>"$YBV_LOG" |
-			grep -Fq "values=$master_left,$master_right" &&
-		amixer -c yogabook cget name='DAC1 Playback Volume' 2>>"$YBV_LOG" |
-			grep -Fq "values=$dac_left,$dac_right"; then
+	if playback_cap=$(ybv_enforce_playback_level_cap "$YBV_LOG"); then
 		ybv_emit audio playback-level-cap PASS 'Capped active-test playback below the saved user level' \
-			"master=$master_left,$master_right/32 (max -16 dB) dac1=$dac_left,$dac_right/127 (max 0 dB) tone=8%"
+			"$playback_cap"
 	else
 		ybv_emit audio playback-level-cap FAIL 'Could not enforce the bounded active-test playback level'
 		ybv_finish_report

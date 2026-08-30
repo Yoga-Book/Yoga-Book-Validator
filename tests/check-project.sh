@@ -14,6 +14,7 @@ required=(
 	docs/coverage.md data/acceptance.json
 	src/yogabook-validator.sh src/yogabook-validator-ui.sh
 	libexec/yogabook-validator-common.sh libexec/yogabook-validator-check.sh
+	libexec/yogabook-validator-audio-levels.sh
 	libexec/yogabook-validator-category.sh
 	libexec/yogabook-validator-dossier.py libexec/yogabook-validator-dossier.sh
 	libexec/yogabook-validator-report.py
@@ -79,6 +80,7 @@ python3 "$root/tests/test-dossier.py"
 python3 "$root/tests/test-hdmi-link.py"
 python3 "$root/tests/test-headset-events.py"
 python3 "$root/tests/test-modem.py"
+"$root/tests/test-audio-levels.sh"
 python3 - "$root/data/acceptance.json" "$root/docs/coverage.md" "$root/ui/yogabook_validator_ui.py" <<'PY'
 import ast
 import json
@@ -259,10 +261,11 @@ grep -Fq "cget name='Sto1 ADC MIXL ADC2 Switch'" "$root/libexec/yogabook-validat
 grep -Fq "cget name='Sto1 ADC MIXR ADC2 Switch'" "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'speaker-tone-retry WARN' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'Bounded speaker tone failed twice' "$root/libexec/yogabook-validator-active.sh"
-grep -Fq "cget name='1 Master Playback Volume'" "$root/libexec/yogabook-validator-active.sh"
-grep -Fq "cget name='DAC1 Playback Volume'" "$root/libexec/yogabook-validator-active.sh"
-grep -Fq '((master_left > 24)) && master_left=24' "$root/libexec/yogabook-validator-active.sh"
-grep -Fq '((dac_left > 87)) && dac_left=87' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq '. "$LIBEXEC_DIR/yogabook-validator-audio-levels.sh"' "$root/libexec/yogabook-validator-active.sh"
+grep -Fq "cget name='1 Master Playback Volume'" "$root/libexec/yogabook-validator-audio-levels.sh"
+grep -Fq "cget name='DAC1 Playback Volume'" "$root/libexec/yogabook-validator-audio-levels.sh"
+grep -Fq '((master_left <= 24)) || master_left=24' "$root/libexec/yogabook-validator-audio-levels.sh"
+grep -Fq '((dac_left <= 87)) || dac_left=87' "$root/libexec/yogabook-validator-audio-levels.sh"
 grep -Fq 'playback-level-cap FAIL' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'parec --device="${default_sink}.monitor"' "$root/libexec/yogabook-validator-active.sh"
 grep -Fq 'pcm0p/sub0/status' "$root/libexec/yogabook-validator-active.sh"
