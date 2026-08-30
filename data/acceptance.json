@@ -1,8 +1,6 @@
 {
   "schema": "org.yogabook.validator.acceptance/v1",
   "unimplemented_selectors": [
-    "display/hdmi-link",
-    "audio/hdmi-route",
     "audio/headset-playback",
     "audio/headset-capture",
     "input/headset-events",

@@ -20,6 +20,7 @@ required=(
 	libexec/yogabook-validator-camera.sh
 	libexec/yogabook-validator-camera-capture.py
 	libexec/yogabook-validator-display.sh
+	libexec/yogabook-validator-hdmi-link.py
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
 	libexec/yogabook-validator-mode-trace.py
@@ -70,6 +71,7 @@ if command -v shellcheck >/dev/null; then
 fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py" "$root"/libexec/*.py
 python3 "$root/tests/test-report.py"
+python3 "$root/tests/test-hdmi-link.py"
 python3 - "$root/data/acceptance.json" "$root/docs/coverage.md" "$root/ui/yogabook_validator_ui.py" <<'PY'
 import ast
 import json
@@ -90,6 +92,7 @@ declared = {
     for selector in layer
 }
 assert set(matrix["unimplemented_selectors"]) <= declared
+assert len(matrix["unimplemented_selectors"]) == 5
 
 table_names = set()
 for line in Path(sys.argv[2]).read_text(encoding="utf-8").splitlines():
@@ -407,6 +410,7 @@ grep -Fq 'org.gnome.Shell' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq '/sys/class/drm/renderD' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq -- '-HDMI-A-' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq 'hdmi-lpe-audio' "$root/libexec/yogabook-validator-display.sh"
+grep -Fq 'yogabook-validator-hdmi-link.py' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq 'micro-hdmi' "$root/libexec/yogabook-validator-physical.sh"
 grep -Fq 'ambient-enabled' "$root/libexec/yogabook-validator-display.sh"
 grep -Fq 'software-rendering failure' "$root/libexec/yogabook-validator-display.sh"

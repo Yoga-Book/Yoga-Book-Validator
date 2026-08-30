@@ -1,3 +1,13 @@
+yogabook-validator (0.30.0) unstable; urgency=medium
+
+  * Validate a connected Micro-HDMI display through active DRM mode state and
+    a negotiated ALSA ELD audio route without playing any sound.
+  * Record disconnected Micro-HDMI video and audio as explicit conditional
+    skips, and fail connected links whose video or ELD state is incomplete.
+  * Replace both HDMI UNIMPLEMENTED selectors with tested runtime evidence.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 03:31:00 +0200
+
 yogabook-validator (0.29.0) unstable; urgency=medium
 
   * Evaluate all 23 coverage-matrix components across structural, functional

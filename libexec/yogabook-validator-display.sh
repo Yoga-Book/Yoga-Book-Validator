@@ -135,6 +135,19 @@ else
 	ybv_emit audio hdmi-lpe FAIL 'Intel LPE Micro-HDMI audio transport is incomplete' "driver=${lpe_driver:-missing} card=${hdmi_audio_card:-missing} pcms=$hdmi_pcm_count nodes=$hdmi_pcm_nodes"
 fi
 
+hdmi_evidence_rc=0
+hdmi_evidence=$(python3 "$LIBEXEC_DIR/yogabook-validator-hdmi-link.py" \
+	"${hdmi_connector:-/nonexistent}" "$(ybv_path /proc/asound)" 2>>"$YBV_LOG") || hdmi_evidence_rc=$?
+if [[ -z $hdmi_evidence || $hdmi_evidence_rc -gt 1 ]]; then
+	ybv_emit display hdmi-link FAIL 'Micro-HDMI functional evaluator did not produce evidence' "exit=$hdmi_evidence_rc"
+	ybv_emit audio hdmi-route FAIL 'Micro-HDMI audio evaluator did not produce evidence' "exit=$hdmi_evidence_rc"
+else
+	while IFS=$'\t' read -r subsystem check_id status summary details; do
+		[[ -n $check_id ]] || continue
+		ybv_emit "$subsystem" "$check_id" "$status" "$summary" "$details"
+	done <<<"$hdmi_evidence"
+fi
+
 mutter=$(ybv_mutter_state "$desktop_user" 2>>"$YBV_LOG" || true)
 dsi_mutter=$(grep '^connector=DSI-1 ' <<<"$mutter" || true)
 if [[ $dsi_mutter =~ ^connector=DSI-1\ mode=1920x1200@[^[:space:]]+\ transform=0\ primary=true\ scale=([0-9]+\.[0-9]+)$ ]]; then

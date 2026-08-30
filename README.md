@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.29.0_all.deb
+sudo apt install ../yogabook-validator_0.30.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -263,7 +263,9 @@ in-memory frames from each sensor for
 payload and signal integrity, exercises one bounded rear-focus step, discards
 the frames and restores the original focus, input and processor state.
 `display` inspects the live i915, DSI, Micro-HDMI DRM and LPE audio, Mutter and
-GNOME Shell display stack without changing it. `haptics` plays one bounded 150 ms pulse on each
+GNOME Shell display stack without changing it. With Micro-HDMI connected it
+requires an active mode and valid ALSA ELD audio negotiation, but never plays
+sound. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `inputs` audits kernel capability maps without
 reading events. `modes` observes one physical Halo keyboard to Wacom pen to
 Halo keyboard cycle and accepts `--timeout SECONDS`. `rotation` extends that

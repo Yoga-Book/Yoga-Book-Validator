@@ -81,8 +81,8 @@ class ReportRendererTest(unittest.TestCase):
         self.assertEqual(gnss["layers"]["structural"]["status"], "FAIL")
         self.assertEqual(gnss["layers"]["functional"]["status"], "NOT_RUN")
         hdmi = next(item for item in model["acceptance"]["components"] if item["id"] == "micro-hdmi")
-        self.assertEqual(hdmi["layers"]["functional"]["status"], "UNIMPLEMENTED")
-        self.assertIn("display/hdmi-link", hdmi["layers"]["functional"]["unimplemented_selectors"])
+        self.assertEqual(hdmi["layers"]["functional"]["status"], "NOT_RUN")
+        self.assertIn("display/hdmi-link", hdmi["layers"]["functional"]["missing_selectors"])
         self.assertEqual(
             {item["file"] for item in model["evidence"]},
             {"results.tsv", "validator.log", "environment.tsv", "state-before.tsv", "state-after.tsv"},
