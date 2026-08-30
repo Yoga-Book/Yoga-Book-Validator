@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.30.0_all.deb
+sudo apt install ../yogabook-validator_0.31.0_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -74,6 +74,7 @@ yogabook-validator display
 yogabook-validator haptics
 yogabook-validator inputs
 yogabook-validator lights
+yogabook-validator modem
 yogabook-validator modes
 yogabook-validator rotation
 yogabook-validator platform
@@ -234,6 +235,12 @@ a deterministic order, preserves every subreport and creates a merged
 `results.tsv`. It continues after failures so the report contains complete
 evidence. Suspend remains opt-in.
 
+The LTE test never enables, connects or disconnects the modem. Without a SIM it
+records explicit conditional skips. With a SIM it requires an already
+registered modem and connected bearer, then sends three packets through that
+bearer's interface to its gateway (or a fixed public probe when no gateway is
+reported). No IMSI, IMEI, APN or operator identity is retained in reports.
+
 The wireless test sends three packets only to the current Wi-Fi gateway. It
 briefly unblocks, powers and scans with Bluetooth without pairing, then restores
 the original Bluetooth power and rfkill state. Nearby device identities are
@@ -281,7 +288,9 @@ policy. `sensors`
 samples the complete IIO layout and SensorProxy. `lights`
 exercises and restores the display, Halo, indicator and charging light control
 paths. `usb` audits the host hubs, role switch, fixed modem path, attached
-accessories and targeted kernel errors. `wireless` checks the current Wi-Fi
+accessories and targeted kernel errors. `modem` validates SIM registration and
+packet replies over an already-connected LTE bearer without changing modem or
+NetworkManager state. `wireless` checks the current Wi-Fi
 gateway, Bluetooth controller features and bounded RF discovery while
 restoring radio state. `suspend` keeps hardware-muted full-duplex audio active
 across one suspend and reports any recovered ALSA xruns. `gnss` accepts `--require-sky` or

@@ -83,6 +83,9 @@ class ReportRendererTest(unittest.TestCase):
         hdmi = next(item for item in model["acceptance"]["components"] if item["id"] == "micro-hdmi")
         self.assertEqual(hdmi["layers"]["functional"]["status"], "NOT_RUN")
         self.assertIn("display/hdmi-link", hdmi["layers"]["functional"]["missing_selectors"])
+        lte = next(item for item in model["acceptance"]["components"] if item["id"] == "lte")
+        self.assertEqual(lte["layers"]["functional"]["status"], "NOT_RUN")
+        self.assertIn("modem/registration", lte["layers"]["functional"]["missing_selectors"])
         self.assertEqual(
             {item["file"] for item in model["evidence"]},
             {"results.tsv", "validator.log", "environment.tsv", "state-before.tsv", "state-after.tsv"},

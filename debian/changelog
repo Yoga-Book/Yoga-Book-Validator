@@ -1,3 +1,16 @@
+yogabook-validator (0.31.0) unstable; urgency=medium
+
+  * Validate LTE registration and packet transport through an existing
+    ModemManager bearer without enabling, connecting or disconnecting it.
+  * Record both LTE functional checks as conditional skips when no SIM is
+    installed, and require registration, an IPv4 interface and packet replies
+    whenever a SIM-backed data session is present.
+  * Include the state-safe LTE audit in automated, category and UI workflows
+    with synthetic coverage for absent and active SIM scenarios, and require
+    ModemManager as a runtime dependency.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 03:52:46 +0200
+
 yogabook-validator (0.30.0) unstable; urgency=medium
 
   * Validate a connected Micro-HDMI display through active DRM mode state and

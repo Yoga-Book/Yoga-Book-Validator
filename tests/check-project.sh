@@ -23,6 +23,7 @@ required=(
 	libexec/yogabook-validator-hdmi-link.py
 	libexec/yogabook-validator-gnss.sh libexec/yogabook-validator-inputs.sh
 	libexec/yogabook-validator-lights.sh
+	libexec/yogabook-validator-modem.py libexec/yogabook-validator-modem.sh
 	libexec/yogabook-validator-mode-trace.py
 	libexec/yogabook-validator-modes.sh
 	libexec/yogabook-validator-passive.sh
@@ -72,6 +73,7 @@ fi
 python3 -m py_compile "$root/ui/yogabook_validator_ui.py" "$root"/libexec/*.py
 python3 "$root/tests/test-report.py"
 python3 "$root/tests/test-hdmi-link.py"
+python3 "$root/tests/test-modem.py"
 python3 - "$root/data/acceptance.json" "$root/docs/coverage.md" "$root/ui/yogabook_validator_ui.py" <<'PY'
 import ast
 import json
@@ -92,7 +94,7 @@ declared = {
     for selector in layer
 }
 assert set(matrix["unimplemented_selectors"]) <= declared
-assert len(matrix["unimplemented_selectors"]) == 5
+assert len(matrix["unimplemented_selectors"]) == 3
 
 table_names = set()
 for line in Path(sys.argv[2]).read_text(encoding="utf-8").splitlines():
@@ -262,7 +264,7 @@ audio_run_line=$(grep -nF 'run_subtest audio' "$root/libexec/yogabook-validator-
 for passive_check in check platform resources display sensors power usb gnss; do
 	grep -Fq "run_subtest $passive_check" "$root/libexec/yogabook-validator-passive.sh"
 done
-if grep -Eq 'camera|audio|haptics|lights|storage|wireless|suspend|pkexec|sudo' "$root/libexec/yogabook-validator-passive.sh"; then
+if grep -Eq 'camera|audio|haptics|lights|modem|storage|wireless|suspend|pkexec|sudo' "$root/libexec/yogabook-validator-passive.sh"; then
 	echo 'passive suite must contain only read-only unprivileged checks' >&2
 	exit 1
 fi
@@ -271,6 +273,7 @@ grep -Fq 'resources              Profile Yoga Book services and thermal safeguar
 grep -Fq 'stability ACTION       Track operator-confirmed cold-boot validation' "$root/src/yogabook-validator.sh"
 grep -Fq 'self.run_command("passive", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("resources", [])' "$root/ui/yogabook_validator_ui.py"
+grep -Fq 'self.run_command("modem", [])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["start", "3"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'self.run_command("stability", ["check"])' "$root/ui/yogabook_validator_ui.py"
 grep -Fq 'yogabook-validator-passive.sh' "$root/libexec/yogabook-validator-full.sh"
@@ -349,6 +352,14 @@ done
 grep -Fq 'run_subtest automated' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest resources' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'run_subtest storage-write' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'run_subtest modem' "$root/libexec/yogabook-validator-category.sh"
+grep -Fq 'run_subtest modem' "$root/libexec/yogabook-validator-automated.sh"
+grep -Fq '["ping", "-I", interface, "-c", "3"' "$root/libexec/yogabook-validator-modem.py"
+grep -Fq 'state-failed-reason' "$root/libexec/yogabook-validator-modem.py"
+if grep -Eq 'simple-connect|--enable|--disable|connection (up|down)' "$root/libexec/yogabook-validator-modem.py" "$root/libexec/yogabook-validator-modem.sh"; then
+	echo 'LTE validation must not change modem or NetworkManager state' >&2
+	exit 1
+fi
 grep -Fq 'run_subtest suspend' "$root/libexec/yogabook-validator-category.sh"
 grep -Fq "ybv_emit suite stability SKIP 'A physical cold boot is required" "$root/libexec/yogabook-validator-category.sh"
 grep -Fq 'category NAME          Run one compatible validation category as a merged suite' "$root/src/yogabook-validator.sh"

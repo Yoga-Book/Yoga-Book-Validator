@@ -3,9 +3,7 @@
   "unimplemented_selectors": [
     "audio/headset-playback",
     "audio/headset-capture",
-    "input/headset-events",
-    "modem/registration",
-    "modem/ip-traffic"
+    "input/headset-events"
   ],
   "components": [
     {

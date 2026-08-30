@@ -240,6 +240,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 "Radios, USB topology and removable-media coverage.",
                 [
                     ("Test wireless", "Verify Wi-Fi plus Bluetooth features and RF reception", self.on_wireless, False),
+                    ("Validate LTE", "Check SIM registration and an existing mobile-data bearer without changing it", self.on_modem, False),
                     ("Inspect USB", "Validate xHCI hubs, role switch, modem transport, and attached accessories", self.on_usb, False),
                     ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
                     ("Test SD writes", "Write, verify, synchronize, and remove a bounded test file", self.on_storage_write, False),
@@ -438,7 +439,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_automated(self, _button) -> None:
         self.confirm(
             "Run the automated hardware suite?",
-            "The suite runs passive, platform, display, sensor, power, USB, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
+            "The suite runs passive, platform, display, sensor, power, USB, LTE, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Suspend is not included. Administrator authorization is required.",
             lambda: self.run_command("automated", ["--yes"]),
         )
 
@@ -556,6 +557,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Test Wi-Fi and Bluetooth?",
             "The validator pings the Wi-Fi gateway, validates classic/LE Bluetooth features, and briefly scans for RF reports without retaining device identities or pairing. It then restores the original Bluetooth power and rfkill state.",
             lambda: self.run_command("wireless", ["--yes"]),
+        )
+
+    def on_modem(self, _button) -> None:
+        self.confirm(
+            "Validate the existing LTE session?",
+            "Without a SIM the validator records conditional skips. With a registered, already-connected bearer it sends three packets through that interface. It never enables, connects or disconnects the modem.",
+            lambda: self.run_command("modem", []),
         )
 
     def on_usb(self, _button) -> None:

@@ -25,6 +25,7 @@ Commands:
   haptics                Pulse both Halo haptic actuators for 150 ms
   inputs                 Inspect kernel capabilities without reading events
   lights                 Exercise and restore panel and platform lights
+  modem                  Validate existing LTE registration and packet transport
   modes                  Observe a physical keyboard to pen to keyboard cycle
   rotation               Verify all four automatic display orientations
   platform               Inspect SoC, CPU, thermal, eMMC and RTC health
@@ -54,7 +55,7 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | display | gnss | passive | physical | full | bundle | platform | power | resources | sensors | stability | usb)
+check | display | gnss | modem | passive | physical | full | bundle | platform | power | resources | sensors | stability | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 report)

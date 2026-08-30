@@ -90,6 +90,7 @@ platform-power)
 	;;
 connectivity-storage)
 	run_subtest usb run_as_desktop "$LIBEXEC_DIR/yogabook-validator-usb.sh"
+	run_subtest modem run_as_desktop "$LIBEXEC_DIR/yogabook-validator-modem.sh"
 	run_subtest wireless "$LIBEXEC_DIR/yogabook-validator-active.sh" wireless --yes
 	run_subtest storage "$LIBEXEC_DIR/yogabook-validator-active.sh" storage --yes
 	run_subtest storage-write "$LIBEXEC_DIR/yogabook-validator-active.sh" storage-write --yes

@@ -57,9 +57,9 @@ audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
 automated)
 	if [[ $include_suspend == true ]]; then
-		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, wireless, storage, audible audio and an eight-second suspend/resume cycle.'
+		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, LTE, wireless, storage, audible audio and an eight-second suspend/resume cycle.'
 	else
-		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, wireless, storage and audible audio; suspend remains opt-in.'
+		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, LTE, wireless, storage and audible audio; suspend remains opt-in.'
 	fi ;;
 category)
 	case $category_name in
@@ -72,7 +72,7 @@ category)
 	platform-power)
 		prompt='This category runs the read-only platform, resource, power, thermal, and sensor checks as one report.' ;;
 	connectivity-storage)
-		prompt='This category tests USB and wireless, reads the SD card, then performs the bounded 64 KiB write, verify, synchronize, and delete check.' ;;
+		prompt='This category tests USB, an existing LTE session and wireless, reads the SD card, then performs the bounded 64 KiB write, verify, synchronize, and delete check.' ;;
 	reliability)
 		prompt='This category runs the suspend/resume test, then starts, advances, or confirms completion of cold-boot tracking according to its persistent state.' ;;
 	*) echo "ERROR: unsupported category: $category_name" >&2; exit 2 ;;

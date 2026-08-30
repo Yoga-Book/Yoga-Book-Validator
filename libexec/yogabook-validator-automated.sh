@@ -64,6 +64,7 @@ run_subtest display run_as_desktop "$LIBEXEC_DIR/yogabook-validator-display.sh"
 run_subtest sensors run_as_desktop "$LIBEXEC_DIR/yogabook-validator-sensors.sh"
 run_subtest power run_as_desktop "$LIBEXEC_DIR/yogabook-validator-power.sh"
 run_subtest usb run_as_desktop "$LIBEXEC_DIR/yogabook-validator-usb.sh"
+run_subtest modem run_as_desktop "$LIBEXEC_DIR/yogabook-validator-modem.sh"
 run_subtest gnss run_as_desktop "$LIBEXEC_DIR/yogabook-validator-gnss.sh"
 run_subtest camera "$LIBEXEC_DIR/yogabook-validator-camera.sh" --yes
 run_subtest inputs "$LIBEXEC_DIR/yogabook-validator-active.sh" inputs --yes
