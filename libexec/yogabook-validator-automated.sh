@@ -29,6 +29,8 @@ fi
 
 ybv_begin_report automated "$output_dir"
 suite_root=$YBV_REPORT_DIR
+gnss_runtime_available=false
+[[ -x /var/lib/yogabook-gnss/root/system/vendor/bin/gpsd ]] && gnss_runtime_available=true
 gnss_restarts_before=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
 
 # Passed by name to run_subtest and invoked indirectly.
@@ -84,16 +86,13 @@ else
 fi
 
 gnss_restarts_after=$(systemctl show yogabook-gnss.service --property=NRestarts --value 2>/dev/null || true)
-if systemctl is-active --quiet yogabook-gnss.service &&
-	[[ $gnss_restarts_before =~ ^[0-9]+$ && $gnss_restarts_after =~ ^[0-9]+$ ]]; then
-	if ((gnss_restarts_after == gnss_restarts_before)); then
-		ybv_emit suite gnss-final-state PASS 'GNSS remained active without restarting across the complete automated suite' "restarts=$gnss_restarts_after"
-	else
-		ybv_emit suite gnss-final-state FAIL 'GNSS restarted during the complete automated suite' "before=$gnss_restarts_before after=$gnss_restarts_after"
-	fi
-else
-	ybv_emit suite gnss-final-state FAIL 'GNSS final service state or restart counter is unavailable' "before=${gnss_restarts_before:-missing} after=${gnss_restarts_after:-missing}"
-fi
+gnss_service_active=false
+systemctl is-active --quiet yogabook-gnss.service && gnss_service_active=true
+IFS=$'\t' read -r gnss_final_status gnss_final_summary gnss_final_details < <(
+	ybv_classify_gnss_final_state "$gnss_runtime_available" "$gnss_service_active" \
+		"$gnss_restarts_before" "$gnss_restarts_after"
+)
+ybv_emit suite gnss-final-state "$gnss_final_status" "$gnss_final_summary" "$gnss_final_details"
 
 desktop_graph=$(run_as_desktop timeout 5 wpctl status 2>/dev/null || true)
 if grep -Fq 'Built-in Audio Stereo Speakers' <<<"$desktop_graph" &&

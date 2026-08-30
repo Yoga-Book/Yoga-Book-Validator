@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.39.0
+YBV_VERSION=0.40.0
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -304,6 +304,22 @@ ybv_read_first() {
 
 ybv_has_command() {
 	command -v "$1" >/dev/null 2>&1
+}
+
+ybv_classify_gnss_final_state() {
+	local runtime_available=$1 service_active=$2 before=$3 after=$4
+	if [[ $runtime_available != true ]]; then
+		printf 'SKIP\tGNSS final service stability is not applicable without the private runtime\truntime=missing before=%s after=%s\n' \
+			"${before:-missing}" "${after:-missing}"
+	elif [[ $service_active != true || ! $before =~ ^[0-9]+$ || ! $after =~ ^[0-9]+$ ]]; then
+		printf 'FAIL\tGNSS final service state or restart counter is unavailable\tbefore=%s after=%s\n' \
+			"${before:-missing}" "${after:-missing}"
+	elif ((after != before)); then
+		printf 'FAIL\tGNSS restarted during the complete automated suite\tbefore=%s after=%s\n' \
+			"$before" "$after"
+	else
+		printf 'PASS\tGNSS remained active without restarting across the complete automated suite\trestarts=%s\n' "$after"
+	fi
 }
 
 ybv_capture() {

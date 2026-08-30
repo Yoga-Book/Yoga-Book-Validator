@@ -1,3 +1,14 @@
+yogabook-validator (0.40.0) unstable; urgency=medium
+
+  * Report the automated GNSS final-state roll-up as not applicable when the
+    private transport runtime was already absent before the suite.
+  * Preserve fail-closed final-state handling for an applicable service that
+    stops, loses its restart counter or actually restarts during validation.
+  * Cover missing-runtime, stable, restarted and unavailable-service outcomes
+    with executable classification tests.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 08:33:00 +0200
+
 yogabook-validator (0.39.0) unstable; urgency=medium
 
   * Split the 34-item physical acceptance form into focused audio, input,
