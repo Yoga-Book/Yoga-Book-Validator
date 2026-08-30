@@ -112,6 +112,8 @@ class ReportRendererTest(unittest.TestCase):
         self.assertIn("Acceptance blockers", rendered_html)
         self.assertIn("display/hdmi-link", rendered_html)
         self.assertIn("gnss/services=FAIL", rendered_html)
+        self.assertIn("Connect a Micro-HDMI display and run Inspect display.", rendered_html)
+        self.assertIn("Import a legally obtained BCM4752 runtime", rendered_html)
         self.assertIn("&lt;unsafe&gt;", rendered_html)
         self.assertNotIn("unit=failed <unsafe>", rendered_html)
         rendered_markdown = (self.report / "report.md").read_text(encoding="utf-8")
@@ -120,6 +122,7 @@ class ReportRendererTest(unittest.TestCase):
         self.assertIn("## Device acceptance readiness", rendered_markdown)
         self.assertIn("0 of 23 components complete", rendered_markdown)
         self.assertIn("Layer readiness:", rendered_markdown)
+        self.assertIn("Connect a Micro-HDMI display and run Inspect display.", rendered_markdown)
 
     def test_rejects_incomplete_report_directory(self) -> None:
         (self.report / "validator.log").unlink()

@@ -76,6 +76,36 @@ SUBSYSTEM_GUIDANCE = {
     "wireless": "Check rfkill, controller/service state and bounded command output without retaining nearby device identities.",
 }
 
+SELECTOR_ACTIONS = (
+    ("suite/stability", "Complete the three-cold-boot tracker and include its final report in the dossier."),
+    ("physical/cold-boots", "Complete the three-cold-boot tracker, then record the observed cold-boot result."),
+    ("physical/reboot", "Perform and observe one normal reboot, then record the result in Physical acceptance."),
+    ("physical/poweroff", "Perform and observe one full shutdown, then record the result in Physical acceptance."),
+    ("display/rotation-upright-return", "Run Test automatic rotation and complete all four orientations."),
+    ("input/keyboard-returned", "Run Test keyboard/pen modes and complete the Halo-to-pen-to-Halo cycle."),
+    ("input/halo-*", "Run Test keyboard/pen modes and complete the Halo-to-pen-to-Halo cycle."),
+    ("input/pen-*", "Run Test keyboard/pen modes with the Wacom surface active."),
+    ("input/touchscreen-*", "Run Test keyboard/pen modes and confirm touchscreen restoration in both modes."),
+    ("audio/headset-*", "Connect a four-pole headset and run Test wired headset."),
+    ("input/headset-events", "Connect a four-pole headset and complete its unplug, reinsert and button cycle."),
+    ("physical/head*", "Connect a four-pole headset and record the audible or microphone observation."),
+    ("physical/jack-detection", "Connect a four-pole headset and record its removal and insertion detection."),
+    ("display/hdmi-link", "Connect a Micro-HDMI display and run Inspect display."),
+    ("audio/hdmi-route", "Connect a Micro-HDMI display with audio capability and run Inspect display."),
+    ("physical/micro-hdmi", "Connect a Micro-HDMI display and record visible video plus audible HDMI output."),
+    ("usb/removable-device", "Connect a removable USB OTG device and run Inspect USB."),
+    ("physical/usb-otg", "Connect a removable USB OTG device and record insertion, use and clean removal."),
+    ("modem/registration", "Insert a working SIM, establish LTE service and run Validate LTE."),
+    ("modem/ip-traffic", "Establish an LTE bearer with a working SIM and run Validate LTE."),
+    ("physical/lte-data", "Insert a working SIM and record real LTE data transfer."),
+    ("gnss/*", "Import a legally obtained BCM4752 runtime, then run GNSS outdoors with a clear sky."),
+    ("physical/gnss", "After legally importing the BCM4752 runtime, record an outdoor satellite fix."),
+    ("wireless/bluetooth-rf", "Place a discoverable Bluetooth peer nearby and run Test wireless."),
+    ("suite/storage-write", "Insert an SD card and run Test SD writes."),
+    ("suspend/*", "Run Test suspend and verify the tablet after resume."),
+    ("physical/*", "Record the operator observation in the grouped Physical acceptance checklist."),
+)
+
 
 def atomic_write(path: Path, content: str) -> None:
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -485,6 +515,14 @@ def acceptance_layer_blockers(layer: dict[str, Any]) -> list[str]:
     return details
 
 
+def acceptance_selector_action(blocker: str) -> str:
+    selector = blocker.removeprefix("unimplemented: ").split("=", 1)[0]
+    for pattern, action in SELECTOR_ACTIONS:
+        if fnmatch.fnmatchcase(selector, pattern):
+            return action
+    return "Run the Validator workflow that emits this selector and inspect its detailed report."
+
+
 def render_markdown(model: dict[str, Any]) -> str:
     run = model["run"]
     summary = model["summary"]
@@ -546,6 +584,11 @@ def render_markdown(model: dict[str, Any]) -> str:
             details = acceptance_layer_blockers(layer)
             blockers.append(f"{layer_name} {layer['status']}: {', '.join(details) or 'review evidence'}")
         lines.append(f"- **{markdown_escape(component['name'])}** — {markdown_escape('; '.join(blockers))}")
+        actionable = [detail for layer in component["layers"].values() for detail in acceptance_layer_blockers(layer)]
+        for detail in actionable:
+            lines.append(
+                f"  - `{markdown_escape(detail)}` — {markdown_escape(acceptance_selector_action(detail))}"
+            )
     lines.extend([
         "",
         "## Priority findings",
@@ -641,10 +684,15 @@ def render_html(model: dict[str, Any]) -> str:
             layer = component["layers"][layer_name]
             if layer["status"] == "PASS":
                 continue
-            details = ", ".join(acceptance_layer_blockers(layer)) or "review evidence"
+            details = acceptance_layer_blockers(layer)
+            detail_items = "".join(
+                f"<li><code>{html.escape(detail)}</code> — "
+                f"{html.escape(acceptance_selector_action(detail))}</li>"
+                for detail in details
+            ) or "<li>Review the detailed evidence for this layer.</li>"
             layer_items.append(
-                f"<li><b>{html.escape(layer_name.title())} {html.escape(layer['status'])}</b>: "
-                f"{html.escape(details)}</li>"
+                f"<li><b>{html.escape(layer_name.title())} {html.escape(layer['status'])}</b>"
+                f"<ul>{detail_items}</ul></li>"
             )
         acceptance_blockers.append(
             f"<li><strong>{html.escape(component['name'])}</strong><ul>{''.join(layer_items)}</ul></li>"
