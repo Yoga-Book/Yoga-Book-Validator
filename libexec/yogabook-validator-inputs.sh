@@ -48,6 +48,8 @@ def row(check_id, status, summary, details=""):
     print(f"{check_id}\t{status}\t{summary}\t{clean}")
 
 
+pens = [device for device in devices if "Wacom" in device.name and "Pen" in device.name]
+pen_mode = bool(pens)
 keyboard = matching("Halo Keyboard")
 keyboard_keys = {
     ecodes.KEY_A, ecodes.KEY_Z, ecodes.KEY_ENTER, ecodes.KEY_SPACE,
@@ -59,7 +61,8 @@ keyboard_keys = {
 if len(keyboard) == 1 and has_codes(keyboard[0], ecodes.EV_KEY, keyboard_keys):
     row("halo-keyboard-capabilities", "PASS", "Halo keyboard exposes typing, modifier, media and click keys", keyboard[0].path)
 else:
-    row("halo-keyboard-capabilities", "FAIL", "Halo keyboard capability map is incomplete", f"devices={len(keyboard)}")
+    status = "SKIP" if pen_mode and not keyboard else "FAIL"
+    row("halo-keyboard-capabilities", status, "Halo keyboard is inactive in drawing mode" if status == "SKIP" else "Halo keyboard capability map is incomplete", f"devices={len(keyboard)}")
 
 touchpads = matching("Halo Keyboard Touchpad")
 touchpad_abs = {
@@ -70,7 +73,8 @@ touchpad_abs = {
 if len(touchpads) == 1 and has_codes(touchpads[0], ecodes.EV_ABS, touchpad_abs) and has_codes(touchpads[0], ecodes.EV_KEY, {ecodes.BTN_TOUCH}):
     row("halo-touchpad-capabilities", "PASS", "Halo touchpad exposes absolute and multitouch axes", touchpads[0].path)
 else:
-    row("halo-touchpad-capabilities", "FAIL", "Halo touchpad capability map is incomplete", f"devices={len(touchpads)}")
+    status = "SKIP" if pen_mode and not touchpads else "FAIL"
+    row("halo-touchpad-capabilities", status, "Halo touchpad is inactive in drawing mode" if status == "SKIP" else "Halo touchpad capability map is incomplete", f"devices={len(touchpads)}")
 
 raw_halo = matching("Goodix Capacitive TouchScreen")
 raw_abs = {ecodes.ABS_X, ecodes.ABS_Y, ecodes.ABS_MT_POSITION_X, ecodes.ABS_MT_POSITION_Y}
@@ -78,7 +82,8 @@ raw_keys = {ecodes.BTN_TOUCH, ecodes.KEY_F1, ecodes.KEY_F2, ecodes.KEY_F3, ecode
 if len(raw_halo) == 1 and has_codes(raw_halo[0], ecodes.EV_ABS, raw_abs) and has_codes(raw_halo[0], ecodes.EV_KEY, raw_keys):
     row("halo-surface-capabilities", "PASS", "Raw Halo surface exposes touch axes and mode-key channels", raw_halo[0].path)
 else:
-    row("halo-surface-capabilities", "FAIL", "Raw Halo surface capability map is incomplete", f"devices={len(raw_halo)}")
+    status = "SKIP" if pen_mode and not raw_halo else "FAIL"
+    row("halo-surface-capabilities", status, "Raw Halo surface is inactive in drawing mode" if status == "SKIP" else "Raw Halo surface capability map is incomplete", f"devices={len(raw_halo)}")
 
 touchscreens = matching("HDP0001:00 2ABB:8102")
 touch_abs = {ecodes.ABS_X, ecodes.ABS_Y, ecodes.ABS_MT_POSITION_X, ecodes.ABS_MT_POSITION_Y, ecodes.ABS_MT_TRACKING_ID}
@@ -117,7 +122,8 @@ haptics = matching("drv260x:haptics")
 if len(haptics) == 2 and all(has_codes(device, ecodes.EV_FF, {ecodes.FF_RUMBLE}) for device in haptics):
     row("haptic-capabilities", "PASS", "Both haptic devices expose force-feedback rumble", "devices=2")
 else:
-    row("haptic-capabilities", "FAIL", "Dual haptic force-feedback capabilities are incomplete", f"devices={len(haptics)}")
+    status = "SKIP" if pen_mode and not haptics else "FAIL"
+    row("haptic-capabilities", status, "Halo haptics are inactive in drawing mode" if status == "SKIP" else "Dual haptic force-feedback capabilities are incomplete", f"devices={len(haptics)}")
 
 intel_hid = matching("Intel HID events")
 hid_keys = {ecodes.KEY_POWER, ecodes.KEY_VOLUMEUP, ecodes.KEY_VOLUMEDOWN, ecodes.KEY_BRIGHTNESSUP, ecodes.KEY_BRIGHTNESSDOWN, ecodes.KEY_RFKILL}
@@ -133,7 +139,6 @@ if len(video_bus) == 1 and has_codes(video_bus[0], ecodes.EV_KEY, video_keys):
 else:
     row("video-bus-capabilities", "FAIL", "Video bus display-control capabilities are incomplete", f"devices={len(video_bus)}")
 
-pens = [device for device in devices if "Wacom" in device.name and "Pen" in device.name]
 pen_abs = {ecodes.ABS_X, ecodes.ABS_Y, ecodes.ABS_PRESSURE}
 pen_keys = {ecodes.BTN_TOOL_PEN, ecodes.BTN_TOUCH}
 if not pens:

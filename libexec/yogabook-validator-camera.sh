@@ -19,7 +19,7 @@ done
 
 if [[ $assume_yes != true ]]; then
 	[[ -t 0 ]] || { echo 'ERROR: confirmation is required; use --yes after reviewing the operation' >&2; exit 2; }
-	printf '%s' 'This test briefly switches the AtomISP route, analyzes three frames from each camera in memory, moves rear focus by one step, and restores all state without saving images. Continue? [y/N] '
+	printf '%s' 'This test briefly switches the AtomISP route, analyzes five post-warmup frames from each camera in memory, moves rear focus by one step, and restores all state without saving images. Continue? [y/N] '
 	read -r answer
 	[[ $answer == y || $answer == Y || $answer == yes || $answer == YES ]] || exit 2
 fi
@@ -31,6 +31,7 @@ for required in media-ctl python3 v4l2-ctl; do
 done
 
 ybv_begin_report camera "$output_dir"
+ybv_register_state_keys 'system-service:yogabook-camera.service'
 real_user=$(ybv_real_user)
 camera_service=yogabook-camera.service
 camera_service_was_running=false
@@ -236,17 +237,17 @@ test_camera() {
 	ybv_emit camera "$id-format" PASS "$label exposes a supported raw Bayer format" \
 		"selected=$pixel_format accepted=$pixel_formats"
 	capture_result=$(python3 "$LIBEXEC_DIR/yogabook-validator-camera-capture.py" \
-		"$video_device" "$width" "$height" "$stride" "$frame_size" 3 "$pixel_format" 2>>"$YBV_LOG" || true)
+		"$video_device" "$width" "$height" "$stride" "$frame_size" 5 "$pixel_format" 2>>"$YBV_LOG" || true)
 	IFS=$'\t' read -r stream_status signal_status stream_details signal_details <<<"$capture_result"
 	case $stream_status in
-	PASS) ybv_emit camera "$id-stream" PASS "$label delivered three complete frames" "$stream_details" ;;
+	PASS) ybv_emit camera "$id-stream" PASS "$label delivered five complete post-warmup frames" "$stream_details" ;;
 	*) ybv_emit camera "$id-stream" FAIL "$label frame capture failed" "${stream_details:-analyzer produced no result}" ;;
 	esac
 	case $signal_status in
-	PASS) ybv_emit camera "$id-signal" PASS "$label frames contain changing luminance data" "$signal_details" ;;
-	WARN) ybv_emit camera "$id-signal" WARN "$label frames may be dark or unusually flat" "$signal_details" ;;
+	PASS) ybv_emit camera "$id-signal" PASS "$label frames contain changing, spatially structured Bayer data" "$signal_details" ;;
+	WARN) ybv_emit camera "$id-signal" WARN "$label signal is flat, clipped, weakly structured or temporally incoherent" "$signal_details" ;;
 	SKIP) ybv_emit camera "$id-signal" SKIP "$label signal integrity was not analyzed" "$signal_details" ;;
-	*) ybv_emit camera "$id-signal" FAIL "$label frames are frozen or invalid" "${signal_details:-analyzer produced no result}" ;;
+	*) ybv_emit camera "$id-signal" FAIL "$label frames are frozen, corrupt or unstructured noise" "${signal_details:-analyzer produced no result}" ;;
 	esac
 }
 

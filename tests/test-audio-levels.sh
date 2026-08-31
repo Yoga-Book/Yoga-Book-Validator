@@ -49,14 +49,14 @@ reset_mixer() {
 # Values above the ceiling are reduced independently on both channels.
 reset_mixer 32,31 127,100
 details=$(ybv_enforce_playback_level_cap "$log_file")
-[[ $details == 'master=24,24/32 (max -16 dB) dac1=87,87/127 (max 0 dB) tone=8%' ]]
+[[ $details == 'master-index=24,24/32 dac1-index=87,87/127 tone-digital-amplitude=8%' ]]
 grep -Fxq 'master=24,24' "$temporary/state/calls"
 grep -Fxq 'dac1=87,87' "$temporary/state/calls"
 
 # A quieter user channel is never raised while the louder peer is capped.
 reset_mixer 10,30 70,90
 details=$(ybv_enforce_playback_level_cap "$log_file")
-[[ $details == 'master=10,24/32 (max -16 dB) dac1=70,87/127 (max 0 dB) tone=8%' ]]
+[[ $details == 'master-index=10,24/32 dac1-index=70,87/127 tone-digital-amplitude=8%' ]]
 grep -Fxq 'master=10,24' "$temporary/state/calls"
 grep -Fxq 'dac1=70,87' "$temporary/state/calls"
 

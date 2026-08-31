@@ -27,6 +27,7 @@ ybv_require_x91l || { echo 'ERROR: storage tests are restricted to Lenovo YB1-X9
 command_name=storage
 [[ $write_test == true ]] && command_name=storage-write
 ybv_begin_report "$command_name" "$output_dir"
+ybv_register_state_keys 'mount:mmcblk*' 'temporary:validator-mounts'
 real_user=$(ybv_real_user)
 [[ $real_user != root ]] || real_user=
 active_mount=

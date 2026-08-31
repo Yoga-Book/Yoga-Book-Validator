@@ -23,6 +23,7 @@ done
 ybv_require_x91l || { echo 'ERROR: wireless tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 
 ybv_begin_report wireless "$output_dir"
+ybv_register_state_keys 'sysfs:rfkill*:soft' 'bluetooth:controller'
 real_user=$(ybv_real_user)
 [[ $real_user != root ]] || real_user=
 

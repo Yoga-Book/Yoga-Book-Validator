@@ -1,3 +1,421 @@
+yogabook-validator (0.75.2) unstable; urgency=medium
+
+  * Make passive input, capability, haptic and final-service checks aware of
+    the mutually exclusive Halo keyboard and drawing modes.
+  * Report intentionally inactive Halo devices as not applicable in drawing
+    mode instead of producing false automatic failures.
+  * Use a deliverable maintainer address and drop redundant dependencies on
+    Essential packages.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 23:25:04 +0200
+
+yogabook-validator (0.75.1) unstable; urgency=medium
+
+  * Classify unattended audio, haptic and light workflows as automatic in
+    generated execution plans.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 23:15:33 +0200
+
+yogabook-validator (0.75.0) unstable; urgency=medium
+
+  * Make every category runner unattended by excluding all workflows that
+    require physical user interaction.
+  * Add a read-only pen-stack check for Halo/Wacom mode coherence, libwacom,
+    Mutter, calibration, current orientation and package integrity.
+  * Move physical headset, controls, mode, rotation, sensor, pen and USB cycle
+    workflows into a clearly separate optional guided section.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 23:03:55 +0200
+
+yogabook-validator (0.74.1) unstable; urgency=medium
+
+  * Avoid the unsupported Gtk.SearchEntry.set_max_length method so the
+    validation window opens on the tablet's GTK 4 runtime.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 22:35:51 +0200
+
+yogabook-validator (0.74.0) unstable; urgency=medium
+
+  * Add a live, case-insensitive validation-test search with multi-token
+    matching across titles, descriptions, categories and action identifiers.
+  * Hide empty categories, expose a clear no-results state, support Escape to
+    clear the query and keep active category or test progress visible.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 22:22:29 +0200
+
+yogabook-validator (0.73.0) unstable; urgency=medium
+
+  * Move pen-target result validation from an embedded shell heredoc into a
+    packaged, independently testable parser with strict field normalization.
+  * Add positive and negative fixtures for all twenty contacts, stage counts,
+    GTK stylus provenance, physical Wacom fallback and summary consistency.
+  * Reject malformed schemas, reordered stages, invalid counts, extra contact
+    fields and mismatched event-path or verifier summaries fail closed.
+  * Enforce exact top-level and stage schemas, ordered completion semantics and
+    bounded plain-text fields so contradictory PASS/TIMEOUT evidence is invalid.
+  * Validate every nested pen result before support bundling and delete an
+    invalid helper artifact before it can retain undeclared private fields.
+  * Declare the GTK build stack and every mandatory runtime command provider,
+    including udev, GLib tools, psmisc and v4l-utils, for clean-room builds.
+  * Expand the installed-package smoke test to cover runtime commands, every
+    helper, GTK imports, acceptance data and hardware-free self-tests.
+  * Prove WCOM0019 I2C-HID/Wacom bind-unbind lifecycle and continuous pen-mode
+    presence so transient digitizer loss is reported explicitly.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 14:20:07 +0200
+
+yogabook-validator (0.72.0) unstable; urgency=medium
+
+  * Accept GtkGestureStylus events when Wayland omits optional device-tool
+    metadata, while retaining strict Wacom identity checks for motion fallback.
+  * Stream pen target, hit, miss and ignored-contact diagnostics to the visible
+    Validator console as well as the retained report log.
+  * Fail closed on an unexpected target-helper exit and bind privacy-safe
+    stylus provenance to each of the twenty accepted contacts.
+  * Prove that every selector in the 226-entry acceptance matrix has an
+    executable result producer instead of checking action routing alone.
+  * Resolve producers generated from shell arrays, helper calls, runtime IDs
+    and wildcard templates directly from their authoritative source code.
+  * Fail the project suite when an exact or wildcard selector drifts away from
+    its implementation or required concrete matches.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 13:34:01 +0200
+
+yogabook-validator (0.71.0) unstable; urgency=medium
+
+  * Fail explicitly when the exact running-kernel headers and build tree are
+    unavailable for required out-of-tree camera modules.
+  * Verify that v4l2loopback exists for the running kernel and that the camera
+    preparation service created correctly named front and rear loopback nodes.
+  * Preserve causal diagnostics so missing headers block dependent module and
+    service checks instead of producing duplicate generic failures.
+  * Expand the deterministic acceptance contract to 226 mapped selectors.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 13:01:03 +0200
+
+yogabook-validator (0.70.0) unstable; urgency=medium
+
+  * Add a full-screen, read-only guided workflow that requires measurable
+    response from both ambient-light devices, the SX9310 and both hinge-angle
+    devices while retaining only aggregate channel ranges.
+  * Route the three new functional selectors to a trusted UI action and include
+    the workflow in the sequential input/modes category.
+  * Expand the deterministic acceptance contract to 222 mapped selectors.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 11:58:00 +0200
+
+yogabook-validator (0.69.0) unstable; urgency=medium
+
+  * Require separate physical acceptance for ambient-light, SX9310 proximity
+    and both hinge-angle sensors instead of treating auto-rotation as proof for
+    every sensor family.
+  * Group the new interaction gates with orientation in the physical UI and
+    make the existing ALS, hinge, proximity and SensorProxy live samples
+    acceptance-blocking instead of leaving them as optional diagnostics.
+  * Expand the deterministic acceptance contract to 219 mapped selectors.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 11:35:00 +0200
+
+yogabook-validator (0.68.0) unstable; urgency=medium
+
+  * Require a fallback-safe kernel post-install hook so future Yoga Book
+    kernel upgrades cannot leave GRUB pinned to an older build.
+  * Add the hook to boot/kernel acceptance and expose a specific remediation
+    finding when its executable copies are missing or inconsistent.
+  * Expand the deterministic acceptance contract to 212 mapped selectors.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 10:52:03 +0200
+
+yogabook-validator (0.67.0) unstable; urgency=medium
+
+  * Replace selector-derived execution advice with one trusted evidence
+    recapture action whenever report integrity fails.
+  * Keep every component-specific workflow unavailable until a new passive
+    capture restores the evidence-integrity gate.
+  * Deduplicate and expose all integrity reasons while preventing an invalid
+    report from displaying a misleading completed execution plan.
+  * Omit empty selector scopes and make the acceptance-blocking remediation
+    explicit in JSON, Markdown, HTML and the GTK UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 09:58:04 +0200
+
+yogabook-validator (0.66.0) unstable; urgency=medium
+
+  * Make every execution-plan workflow directly launchable through a compact
+    play action backed by a compiled UI callback allowlist.
+  * Keep report command text inert and leave unknown action IDs read-only so a
+    modified report cannot dispatch an arbitrary command or callback.
+  * Add the missing dedicated GNSS UI workflow with legal-runtime, outdoor-sky
+    and real-fix guidance instead of relying on combined suites.
+  * Verify that every report action except the deliberate maintenance fallback
+    has an existing trusted UI handler and fail project checks on drift.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 09:41:55 +0200
+
+yogabook-validator (0.65.0) unstable; urgency=medium
+
+  * Route every acceptance selector to an explicit automatic, guided,
+    physical or external validation workflow instead of generic advice.
+  * Deduplicate root blockers into a deterministic execution plan with exact
+    commands, prerequisites, safety notes and affected component counts.
+  * Render the plan in JSON, Markdown, HTML and the GTK UI while keeping report
+    command text informational and never executable by the UI.
+  * Cover all 211 selectors, route ambiguity, cross-component deduplication and
+    dependency collapse with deterministic report fixtures.
+  * Accept generic Wayland logical-device names only through GtkGestureStylus
+    tool identity, separate fallback and stylus contact state, and keep the
+    crosshair visible across target and orientation transitions.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 09:20:07 +0200
+
+yogabook-validator (0.64.0) unstable; urgency=medium
+
+  * Promote internal eMMC storage to an explicit acceptance component instead
+    of leaving its existing health, lifetime and filesystem checks unclaimed.
+  * Add an explicit active bounded 4 MiB non-zero root-filesystem write, fsync,
+    read verification, removal and cleanup probe that refuses other mounts,
+    while keeping passive validation read-only.
+  * Separate eMMC/root-filesystem journal errors from unrelated GPU, thermal
+    and removable-card faults, fail closed when the journal is unreadable,
+    recognize both kernel message orders, and apply freshness to volatile gates.
+  * Delete raw desktop-monitor audio and mixer snapshots after analysis, make
+    support bundles report-only allowlists, and stop persisting full journals.
+  * Add a physical persistence observation for application data across a cold
+    boot and expose the new 24-component coverage contract in reports and UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 08:45:47 +0200
+
+yogabook-validator (0.63.0) unstable; urgency=medium
+
+  * Keep the post-restore PipeWire transport probe silent so the audio test
+    emits only its explicitly bounded tone, even when the user's volume is high.
+  * Fail closed on session-manager, PCM-ownership and UCM-route setup, make
+    cancellation restore and terminate, discard microphone WAV data after
+    analysis, and include every audio safety prerequisite in acceptance.
+  * Accept a logical Wacom pointer only through GTK's dedicated stylus
+    controller, retain strict pressure-fallback identity, and record accepted
+    event provenance without storing coordinates.
+  * Keep the application crosshair visible across transient orientation-state
+    mismatches, add bounded readiness hysteresis and explain ignored contacts.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 08:15:00 +0200
+
+yogabook-validator (0.62.0) unstable; urgency=medium
+
+  * Analyze both S16 capture channels for AC signal, clipping, DC offset and
+    imbalance instead of accepting any nonzero microphone sample.
+  * Reuse the same deterministic classifier for internal and headset capture,
+    with conservative PASS, WARN and FAIL gates plus synthetic fixtures.
+  * Describe automated audio results as transport evidence; audible quality and
+    microphone intelligibility remain separate physical acceptance.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 08:00:00 +0200
+
+yogabook-validator (0.61.0) unstable; urgency=medium
+
+  * Decode BG10 and BA10 as 10-bit little-endian Bayer samples instead of
+    mixing low and high bytes from half of each active row.
+  * Analyze the green plane with robust spatial, clipping, corruption and
+    temporal-coherence metrics while excluding padding and retaining no image.
+  * Discard two warm-up buffers and analyze five frames; reject frozen active
+    pixels even when padding changes and distinguish noise from a real scene.
+  * Add deterministic fixtures for both Bayer parities, structured scenes,
+    frozen buffers, random and fixed noise, clipping, corruption and truncation.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 07:30:00 +0200
+
+yogabook-validator (0.60.0) unstable; urgency=medium
+
+  * Add selector-level freshness policies: 24 hours for charging, LTE and
+    resume, seven days for USB, SD and volatile physical conditions, and 30
+    days for stable physical observations.
+  * Mark expired passing evidence STALE without erasing historical failures or
+    warnings; expose observation, expiry and refresh guidance in reports.
+  * Preserve the original observation time across verified physical-checklist
+    imports so reconfirmation cannot silently renew acceptance evidence.
+  * Reject future and out-of-run timestamps and ambiguous freshness policies.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 07:15:00 +0200
+
+yogabook-validator (0.59.0) unstable; urgency=medium
+
+  * Add a guided USB OTG cycle that verifies host-role transition, exactly one
+    authorized accessory, a descriptor transfer, physical removal and restore.
+  * Finalize cancellation reports and bound cleanup while discarding device
+    identities; exercise removable storage with a bounded read when applicable.
+  * Require usbutils because descriptor transfer validation depends on lsusb.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 07:00:00 +0200
+
+yogabook-validator (0.58.0) unstable; urgency=medium
+
+  * Compare privacy-safe display, input, sensor, radio, camera, power, storage,
+    modem, GNSS and service health snapshots around suspend/resume.
+  * Require topology preservation and bounded post-resume I/O for applicable
+    hardware instead of treating uninterrupted ALSA transport as sufficient.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 06:19:00 +0200
+
+yogabook-validator (0.57.0) unstable; urgency=medium
+
+  * Add a bounded charging-session check for charger continuity, safe thermal
+    state, measurable fuel-gauge progress or a stable full-charge terminal.
+  * Preserve raw time-series samples in reports and keep disconnected charging
+    explicitly incomplete instead of accepting an offline snapshot.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 06:06:00 +0200
+
+yogabook-validator (0.56.1) unstable; urgency=medium
+
+  * Make state restoration causal per test: owned resources remain hard gates,
+    while unrelated concurrent desktop drift is reported without false failure.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 05:56:00 +0200
+
+yogabook-validator (0.56.0) unstable; urgency=medium
+
+  * Handle pen contact with GTK's dedicated stylus gesture instead of generic
+    mouse-click arbitration, while retaining a verified pressure fallback.
+  * Report the accepted pen source, tool and event path without storing pen
+    coordinates, and show explicit hover/contact guidance in the target UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 05:46:00 +0200
+
+yogabook-validator (0.55.0) unstable; urgency=medium
+
+  * Hash physical-results.tsv and verify its raw environment, log, results and
+    inventory evidence before loading reference observations.
+  * Require every imported physical row to be reconfirmed in the current
+    session, keep answer files private and load reports off the GTK main loop.
+  * Parse physical answer TSV exactly once without whitespace-field collapse
+    or time-of-check/time-of-use gaps.
+  * Reject dossier sources whose own evidence-integrity gate failed and allow
+    a newer dependency blocker to supersede stale downstream failures.
+  * Collapse GNSS acceptance guidance to its root prerequisite while retaining
+    every dependent selector in machine-readable evidence.
+  * Reject incomplete or impossible wildcard contracts and report INFO-only
+    subsystem health as incomplete.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 05:32:55 +0200
+
+yogabook-validator (0.54.0) unstable; urgency=medium
+
+  * Report the missing private GNSS runtime as the single root failure and
+    classify the dependent service and NMEA-pipe checks as blocked skips.
+  * Give the runtime finding a direct, legally scoped remediation action
+    instead of generic GNSS troubleshooting guidance.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 05:14:56 +0200
+
+yogabook-validator (0.53.0) unstable; urgency=medium
+
+  * Require an explicit result for every physical acceptance item and a
+    mandatory reason for failures and unavailable conditions.
+  * Reject incomplete, duplicate, unknown or ambiguous answer files before a
+    report is created instead of silently defaulting missing rows to SKIP.
+  * Resume physical observations only from integrity-checked same-release,
+    same-device reports with the current matrix and exact package inventory.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 04:58:51 +0200
+
+yogabook-validator (0.52.0) unstable; urgency=medium
+
+  * Require explicit identity or cardinality contracts for every wildcard
+    acceptance selector so partial sensor, USB and service evidence cannot
+    produce a false PASS.
+  * Treat INFO-only observations as incomplete acceptance evidence and report
+    every failed systemd unit as a warning instead of assuming it is unrelated.
+  * Expose structured selector blockers, evidence-integrity problems, package
+    inventory gaps and recommended corrective actions in the application UI.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 04:41:45 +0200
+
+yogabook-validator (0.51.0) unstable; urgency=medium
+
+  * Resolve dossier checks from the latest conclusive timestamped evidence so
+    focused PASS results can supersede older failures and later SKIP rows
+    cannot erase completed coverage.
+  * Preserve every selected and superseded source row in an integrity-hashed
+    observations.tsv ledger with source provenance and selection reasons.
+  * Add an explicit evidence-integrity gate for malformed rows, conflicting
+    observations, package inventory, run completion and state preservation.
+  * Surface integrity failures in JSON, Markdown, HTML and the application UI
+    so corrupted or incomplete evidence can never render as a green result.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 04:26:00 +0200
+
+yogabook-validator (0.50.0) unstable; urgency=medium
+
+  * Add an APT repository health check that refreshes only signed release
+    metadata in disposable list and cache directories.
+  * Require every configured repository to succeed, redact URI credentials,
+    and leave the system APT cache and package indexes untouched.
+  * Include repository health in automated, passive, quiet and platform/power
+    category evidence and in the boot/software-source acceptance gate.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 04:12:00 +0200
+
+yogabook-validator (0.49.1) unstable; urgency=medium
+
+  * Emit the required gnss/gpsd result when the private BCM4752 runtime is
+    absent or the integrated health probe is used.
+  * Distinguish an observed gpsd TPV stream from inconclusive and failed
+    health captures, with regression fixtures for every outcome.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 03:38:00 +0200
+
+yogabook-validator (0.49.0) unstable; urgency=medium
+
+  * Require halo-keyboard 1.0.0-7 and verify its system-integrated libwacom
+    metadata and neutral dynamic-calibration policy.
+  * Add a guided GTK4/Wayland pen-target workflow that validates post-Mutter
+    stylus mapping in both landscape and portrait directions.
+  * Retain only per-orientation hit and miss totals, reject non-stylus input,
+    and verify the final return to upright Halo keyboard mode.
+  * Draw a transient live pen crosshair and accept Wacom tip presses through
+    the GTK pointer event path, without persisting hover or contact positions.
+  * Keep the in-window crosshair visible across the stylus leave emitted after
+    a tip press and acknowledge every accepted target before advancing.
+  * Detect Wacom tip contact from pressure and button state on the delivered
+    GDK motion event when the compositor omits GTK stylus/click gestures.
+  * Log only stage-level hit/miss counters during the guided run so failures
+    remain diagnosable without retaining coordinates or trajectories.
+  * Correct the passive live-calibration audit, avoid deferred checks poisoning
+    later guided evidence, and record actual SensorProxy/Mutter stage values.
+  * On Stop, allow bounded physical Halo restoration, finalize the report and
+    run state-preservation before the cancellation supervisor can escalate.
+  * Explain target misses in the full-screen workflow instead of silently
+    leaving the operator on the same target.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 03:05:00 +0200
+
+yogabook-validator (0.48.0) unstable; urgency=medium
+
+  * Return privileged dossier output to the invoking desktop user after a
+    successful composition, using the account's primary group.
+  * Keep failed or unresolved output paths untouched and verify ownership is
+    applied only after the integrity-checked compositor completes.
+  * Require the Mutter yogabook5 lifecycle fix in the runtime stack audit.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Mon, 31 Aug 2026 02:08:48 +0200
+
+yogabook-validator (0.47.0) unstable; urgency=medium
+
+  * Retry state comparison only for bounded, service-only asynchronous
+    transitions while preserving immediate failures for every other mutation.
+  * Report when state equality required a service-settling retry.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 23:58:00 +0200
+
+yogabook-validator (0.46.0) unstable; urgency=medium
+
+  * Capture the exact 15-package runtime inventory as hashed report evidence.
+  * Render package provenance in JSON, Markdown and HTML diagnostics.
+  * Reject dossiers that mix package revisions and preserve the validated TSV
+    for direct ISO-manifest comparison.
+
+ -- Yoga Book maintainers <Yoga-Book@users.noreply.github.com>  Sun, 30 Aug 2026 23:40:00 +0200
+
 yogabook-validator (0.45.0) unstable; urgency=medium
 
   * Add a guided Power, Volume Up/Down and lid close/reopen event workflow.

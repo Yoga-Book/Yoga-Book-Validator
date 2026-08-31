@@ -3,7 +3,7 @@
 
 set -Eeuo pipefail
 
-YBV_VERSION=0.45.0
+YBV_VERSION=0.75.2
 YBV_SYSROOT=${YBV_SYSROOT:-/}
 YBV_RESULTS_BASE=${YBV_RESULTS_BASE:-${PWD}/yogabook-validator-results}
 YBV_REPORT_DIR=${YBV_REPORT_DIR:-}
@@ -15,6 +15,7 @@ YBV_FINAL_ROLLUP_DETAILS=
 YBV_FINAL_ROLLUP_STATUS=
 YBV_FINAL_ROLLUP_SUMMARY=
 YBV_RESTORE_CALLBACK=
+declare -a YBV_STATE_OWNED_PATTERNS=()
 YBV_STATE_BEFORE=
 YBV_STATE_AFTER=
 YBV_COMMON_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -34,6 +35,41 @@ ybv_sanitize() {
 	value=${value//$'\r'/ }
 	value=${value//$'\n'/ }
 	printf '%s' "$value"
+}
+
+ybv_capture_package_inventory() {
+	local output=$1 kernel_release package
+	local -a packages
+	: >"$output"
+	if [[ -n ${YBV_PACKAGE_INVENTORY_SOURCE:-} ]]; then
+		[[ -r $YBV_PACKAGE_INVENTORY_SOURCE ]] || return 1
+		cp -- "$YBV_PACKAGE_INVENTORY_SOURCE" "$output"
+		return
+	fi
+	[[ $YBV_SYSROOT == / ]] || return 0
+	ybv_has_command dpkg-query || return 0
+	kernel_release=${YBV_KERNEL_RELEASE:-$(uname -r)}
+	packages=(
+		alsa-ucm-conf-yogabook
+		"linux-headers-$kernel_release"
+		"linux-image-$kernel_release"
+		sof-topology-yogabook
+		halo-keyboard
+		yogabook-sensors
+		yogabook-camera
+		yogabook-gnss
+		yogabook-validator
+		gnome-control-center
+		gnome-control-center-data
+		gir1.2-mutter-18
+		libmutter-18-0
+		mutter-common
+		mutter-common-bin
+	)
+	for package in "${packages[@]}"; do
+		dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' "$package" \
+			2>/dev/null || true
+	done >"$output"
 }
 
 ybv_begin_report() {
@@ -58,6 +94,7 @@ ybv_begin_report() {
 	YBV_REPORT="$YBV_REPORT_DIR/results.tsv"
 	YBV_LOG="$YBV_REPORT_DIR/validator.log"
 	YBV_ENVIRONMENT="$YBV_REPORT_DIR/environment.tsv"
+	YBV_PACKAGES="$YBV_REPORT_DIR/validated-packages.tsv"
 	YBV_STATE_BEFORE="$YBV_REPORT_DIR/state-before.tsv"
 	YBV_STATE_AFTER="$YBV_REPORT_DIR/state-after.tsv"
 	printf 'timestamp\tsubsystem\tcheck_id\tstatus\tsummary\tdetails\n' >"$YBV_REPORT"
@@ -71,6 +108,10 @@ ybv_begin_report() {
 		printf 'desktop\t%s\n' "$(ybv_sanitize "${XDG_CURRENT_DESKTOP:-unknown}")"
 		printf 'session_type\t%s\n' "$(ybv_sanitize "${XDG_SESSION_TYPE:-unknown}")"
 	} >"$YBV_ENVIRONMENT"
+	ybv_capture_package_inventory "$YBV_PACKAGES" || {
+		printf 'PACKAGE_INVENTORY_ERROR: package provenance capture failed\n' >&2
+		: >"$YBV_PACKAGES"
+	}
 	{
 		printf 'Yoga Book Validator %s\n' "$YBV_VERSION"
 		printf 'Command: %s\n' "$command_name"
@@ -96,6 +137,15 @@ ybv_register_restore_callback() {
 	[[ $callback =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || return 2
 	declare -F "$callback" >/dev/null || return 2
 	YBV_RESTORE_CALLBACK=$callback
+}
+
+ybv_register_state_keys() {
+	local pattern
+	(($# > 0)) || return 2
+	for pattern in "$@"; do
+		[[ -n $pattern && $pattern != *$'\t'* && $pattern != *$'\n'* ]] || return 2
+		YBV_STATE_OWNED_PATTERNS+=("$pattern")
+	done
 }
 
 ybv_snapshot_sysfs_values() {
@@ -251,8 +301,50 @@ ybv_capture_state_snapshot() {
 	mv -f -- "$temporary" "$output"
 }
 
+ybv_changed_state_keys() {
+	local diff_file=$1
+	awk -F '\t' '
+		/^(--- |\+\+\+ |@@)/ { next }
+		/^[+-]/ {
+			line=substr($0, 2)
+			split(line, fields, "\t")
+			if (fields[1] != "schema") print fields[1]
+		}
+	' "$diff_file" | LC_ALL=C sort -u
+}
+
+ybv_state_key_is_owned() {
+	local key=$1 pattern
+	# Validator-created /run mounts are a hard cleanup invariant for every test.
+	[[ $key == temporary:validator-mounts ]] && return 0
+	for pattern in "${YBV_STATE_OWNED_PATTERNS[@]}"; do
+		# Deliberately use shell-pattern matching for registered ownership globs.
+		# shellcheck disable=SC2053
+		[[ $key == $pattern ]] && return 0
+	done
+	return 1
+}
+
+ybv_classify_state_changes() {
+	local diff_file=$1 owned_output=$2 external_output=$3 key
+	: >"$owned_output"
+	: >"$external_output"
+	while IFS= read -r key; do
+		[[ -n $key ]] || continue
+		if ybv_state_key_is_owned "$key"; then
+			printf '%s\n' "$key" >>"$owned_output"
+		else
+			printf '%s\n' "$key" >>"$external_output"
+		fi
+	done < <(ybv_changed_state_keys "$diff_file")
+}
+
 ybv_verify_state_preservation() {
-	local callback_rc=0 diff_file="$YBV_REPORT_DIR/state-diff.txt"
+	local callback_rc=0 diff_file="$YBV_REPORT_DIR/state-diff.txt" attempt
+	local owned_file="$YBV_REPORT_DIR/.owned-state-changes" external_file="$YBV_REPORT_DIR/.external-state-changes"
+	local owned_keys external_keys
+	local settle_retries=${YBV_SERVICE_SETTLE_RETRIES:-20}
+	local settle_interval=${YBV_SERVICE_SETTLE_INTERVAL:-0.5}
 	if [[ -n $YBV_RESTORE_CALLBACK ]]; then
 		"$YBV_RESTORE_CALLBACK" || callback_rc=$?
 	fi
@@ -273,8 +365,42 @@ ybv_verify_state_preservation() {
 		return "$callback_rc"
 	fi
 	diff -u -- "$YBV_STATE_BEFORE" "$YBV_STATE_AFTER" >"$diff_file" || true
-	ybv_emit validator state-preservation FAIL 'Observable mutable state differs from the pre-test snapshot' 'See state-diff.txt'
-	return 1
+	ybv_classify_state_changes "$diff_file" "$owned_file" "$external_file"
+	if [[ -s $owned_file ]]; then
+		for ((attempt = 1; attempt <= settle_retries; attempt++)); do
+			sleep "$settle_interval"
+			if ! ybv_capture_state_snapshot "$YBV_STATE_AFTER"; then
+				break
+			fi
+			if cmp -s -- "$YBV_STATE_BEFORE" "$YBV_STATE_AFTER"; then
+				rm -f -- "$diff_file" "$owned_file" "$external_file"
+				ybv_emit validator state-preservation PASS \
+					'State owned by this test matches after asynchronous resources settled' \
+					"settle-retries=$attempt"
+				return "$callback_rc"
+			fi
+			diff -u -- "$YBV_STATE_BEFORE" "$YBV_STATE_AFTER" >"$diff_file" || true
+			ybv_classify_state_changes "$diff_file" "$owned_file" "$external_file"
+			[[ -s $owned_file ]] || break
+		done
+	fi
+	if [[ -s $owned_file ]]; then
+		owned_keys=$(paste -sd, "$owned_file")
+		rm -f -- "$owned_file" "$external_file"
+		ybv_emit validator state-preservation FAIL \
+			'Test-owned mutable state differs from the pre-test snapshot' \
+			"keys=$owned_keys; see state-diff.txt"
+		return 1
+	fi
+	external_keys=$(paste -sd, "$external_file")
+	rm -f -- "$owned_file" "$external_file"
+	ybv_emit validator external-state-drift WARN \
+		'Unowned desktop or hardware state changed concurrently with this test' \
+		"keys=$external_keys; see state-diff.txt"
+	ybv_emit validator state-preservation PASS \
+		'Every mutable state key owned by this test was restored' \
+		"external-drift=${external_keys:-unknown}"
+	return "$callback_rc"
 }
 
 ybv_emit() {
@@ -358,6 +484,33 @@ ybv_classify_gnss_final_state() {
 			"$before" "$after"
 	else
 		printf 'PASS\tGNSS remained active without restarting across the complete automated suite\trestarts=%s\n' "$after"
+	fi
+}
+
+ybv_classify_root_storage_journal() {
+	local emmc_name=$1 root_block=$2 journal_rc=$3 journal emmc_regex root_regex error_pattern
+	journal=$(cat)
+	if [[ ! $journal_rc =~ ^[0-9]+$ || $journal_rc -ne 0 ]]; then
+		printf 'SKIP\tKernel journal could not be read for the targeted eMMC scan\texit=%s\n' \
+			"${journal_rc:-invalid}"
+		return
+	fi
+	if [[ -z $emmc_name || -z $root_block ]]; then
+		printf 'SKIP\tInternal eMMC root device could not be identified for a targeted journal scan\tdevice=unreadable\n'
+		return
+	fi
+	# Escape every extended-regex metacharacter in kernel-provided block names.
+	# shellcheck disable=SC2001
+	emmc_regex=$(sed 's/[][\\.^$*+?(){}|]/\\&/g' <<<"$emmc_name")
+	# shellcheck disable=SC2001
+	root_regex=$(sed 's/[][\\.^$*+?(){}|]/\\&/g' <<<"$root_block")
+	error_pattern="(${emmc_regex}|${root_regex}).*(I/O error|timed out|timeout|CRC error|reset failed)|(I/O error|timed out|timeout|CRC error|reset failed).*(dev[ =]+)?(${emmc_regex}|${root_regex})|EXT4-fs \\(${root_regex}\\).*(error|aborted|read-only)|remounting filesystem read-only.*${root_regex}"
+	if grep -Eiq "$error_pattern" <<<"$journal"; then
+		printf 'FAIL\tTargeted eMMC or root-filesystem errors occurred in this boot\t%s\n' \
+			"$(grep -Ei "$error_pattern" <<<"$journal" | head -n 1)"
+	else
+		printf 'PASS\tNo targeted eMMC or root-filesystem errors occurred in this boot\tdevice=%s\n' \
+			"$root_block"
 	fi
 }
 

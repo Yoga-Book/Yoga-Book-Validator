@@ -92,10 +92,10 @@ for vendor_file in /sys/bus/usb/devices/*/idVendor; do
 done
 if ((removable_count == 0)); then
 	ybv_emit usb removable-device SKIP 'No removable USB accessory is attached; OTG enumeration was not exercised'
-elif ((authorized_count == removable_count)); then
-	ybv_emit usb removable-device PASS 'All attached removable USB devices are authorized and enumerated' "devices=$removable_count speeds=${removable_speeds[*]}"
+elif ((authorized_count == removable_count)) && [[ $role == host ]]; then
+	ybv_emit usb removable-device SKIP 'Attached USB devices are visible, but a guided OTG insertion/removal cycle is required' "devices=$removable_count speeds=${removable_speeds[*]} role=$role"
 else
-	ybv_emit usb removable-device FAIL 'One or more removable USB devices are not authorized' "devices=$removable_count authorized=$authorized_count"
+	ybv_emit usb removable-device FAIL 'A removable device is unauthorized or the OTG controller is not in host role' "devices=$removable_count authorized=$authorized_count role=$role"
 fi
 
 if ybv_has_command journalctl; then

@@ -26,6 +26,8 @@ assume_yes=false
 include_suspend=false
 suspend_seconds=8
 mode_timeout=90
+[[ $action != pen-mapping ]] || mode_timeout=240
+[[ $action != sensor-interactions ]] || mode_timeout=120
 while (($#)); do
 	case $1 in
 	--output)
@@ -42,7 +44,7 @@ while (($#)); do
 		[[ $# -ge 2 ]] || { echo 'ERROR: --seconds requires a value' >&2; exit 2; }
 		suspend_seconds=$2; shift 2 ;;
 	--timeout)
-		[[ $action == controls || $action == modes || $action == rotation || $action == headset ]] || { echo 'ERROR: --timeout is valid only for controls, modes, rotation or headset' >&2; exit 2; }
+		[[ $action == controls || $action == modes || $action == pen-mapping || $action == rotation || $action == sensor-interactions || $action == headset || $action == usb-cycle ]] || { echo 'ERROR: --timeout is valid only for guided tests' >&2; exit 2; }
 		[[ $# -ge 2 ]] || { echo 'ERROR: --timeout requires a value' >&2; exit 2; }
 		mode_timeout=$2; shift 2 ;;
 	*)
@@ -59,9 +61,9 @@ audio)
 	prompt='This test temporarily takes exclusive control of Yoga Book audio, plays a quiet one-second tone, and records the internal microphone.' ;;
 automated)
 	if [[ $include_suspend == true ]]; then
-		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, LTE, wireless, storage, audible audio and an eight-second suspend/resume cycle.'
+			prompt='This suite runs every automated transport check, including platform health, bounded internal-storage I/O, camera routing, haptics, lights, LTE, wireless, storage, audible audio and an eight-second suspend/resume cycle.'
 	else
-		prompt='This suite runs every automated transport check, including platform health, camera routing, haptics, lights, LTE, wireless, storage and audible audio; suspend remains opt-in.'
+			prompt='This suite runs every automated transport check, including platform health, bounded internal-storage I/O, camera routing, haptics, lights, LTE, wireless, storage and audible audio; suspend remains opt-in.'
 	fi ;;
 category)
 	case $category_name in
@@ -74,35 +76,43 @@ category)
 	platform-power)
 		prompt='This category runs the read-only platform, resource, power, thermal, and sensor checks as one report.' ;;
 	connectivity-storage)
-		prompt='This category tests USB, an existing LTE session and wireless, reads the SD card, then performs the bounded 64 KiB write, verify, synchronize, and delete check.' ;;
+		prompt='This category tests USB, an existing LTE session and wireless, exercises bounded internal-root I/O, reads the SD card, then performs the bounded 64 KiB SD write, verify, synchronize, and delete check.' ;;
 	reliability)
 		prompt='This category runs the suspend/resume test, then starts, advances, or confirms completion of cold-boot tracking according to its persistent state.' ;;
 	*) echo "ERROR: unsupported category: $category_name" >&2; exit 2 ;;
 	esac ;;
 camera)
-	prompt='This test pauses the desktop camera processor, captures three private AtomISP frames from each sensor, checks rear focus, then restores the original route and processor state.' ;;
+	prompt='This test pauses the desktop camera processor, analyzes five private post-warmup AtomISP frames from each sensor, checks rear focus, then restores the original route and processor state.' ;;
 controls)
 	prompt="This guided test temporarily suppresses system actions from the Yoga Book Power, Volume and lid devices while you press each button and close then reopen the lid within ${mode_timeout} seconds. Every exclusive input grab is released before reporting." ;;
 haptics)
 	prompt='This test plays one bounded 150 ms moderate-strength pulse on each Halo haptic actuator.' ;;
 headset)
 	prompt="This test requires a connected four-pole headset. It plays one quiet one-second tone only through the headphones, records three seconds from the headset microphone, then asks for one unplug, reinsert and button cycle within ${mode_timeout} seconds. Speakers remain muted and all audio state is restored." ;;
-inputs)
-	prompt='This test reads kernel input capability maps without grabbing devices, monitoring events, or injecting input.' ;;
+	inputs)
+		prompt='This test reads kernel input capability maps without grabbing devices, monitoring events, or injecting input.' ;;
+	internal-storage)
+		prompt='This test writes, fsyncs, read-verifies and removes one private 4 MiB non-zero temporary file on the internal root filesystem. It refuses targets on other mounts and reports any residual probe file.' ;;
 lights)
 	prompt='This test makes one-step changes to panel and platform light brightness, then restores every brightness and trigger value.' ;;
 modes)
 	prompt='This test observes one physical Halo keyboard to Wacom pen to Halo keyboard mode cycle. It does not read or record input events.' ;;
+pen-mapping)
+	prompt='This guided test verifies stylus-only GTK targets after Mutter mapping in upright landscape, both portraits, inverted landscape and returned upright. It stores hit/miss totals, never raw pen coordinates.' ;;
 quiet)
 	prompt='This suite runs every non-audible automated diagnostic, including cameras, input capabilities, lights, radios and read-only storage. It excludes playback, capture, haptics, suspend and guided workflows.' ;;
 rotation)
 	prompt='This test observes a Halo-to-pen mode cycle while you rotate the tablet through all four cardinal orientations and return it upright. It does not change display policy or read input events.' ;;
+sensor-interactions)
+	prompt='This read-only guided test measures both ambient-light sensors, SX9310 proximity channels and both hinge-angle devices while you shade, approach and fold the tablet.' ;;
 storage)
 	prompt='This test reads the inserted SD card and mounts its filesystems read-only, then restores their original mount state.' ;;
 storage-write)
 	prompt='This test writes, verifies, synchronizes and deletes one 64 KiB temporary file on each writable SD filesystem, then restores its original mount state.' ;;
 suspend)
 	prompt="This test takes exclusive control of audio and suspends the tablet for ${suspend_seconds} seconds." ;;
+usb-cycle)
+	prompt="This guided test requires an initially disconnected OTG port, then validates one physical accessory insertion, host-role transition, descriptor transfer, removal and restoration of the original cable state within ${mode_timeout} seconds per step. Device identities are discarded." ;;
 wireless)
 	prompt='This test verifies Wi-Fi gateway transport, briefly scans with Bluetooth, and restores the original Bluetooth block and power state.' ;;
 *) echo "ERROR: unsupported active test: $action" >&2; exit 2 ;;
@@ -116,9 +126,9 @@ if [[ $assume_yes != true ]]; then
 fi
 
 ybv_require_x91l || { echo 'ERROR: active tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
-if [[ $action == controls || $action == haptics || $action == inputs || $action == modes || $action == rotation ]]; then
+if [[ $action == controls || $action == haptics || $action == inputs || $action == modes || $action == pen-mapping || $action == rotation || $action == sensor-interactions ]]; then
 	ybv_has_command python3 || { echo 'ERROR: missing command: python3' >&2; exit 2; }
-elif [[ $action == automated || $action == camera || $action == category || $action == lights || $action == quiet || $action == storage || $action == storage-write || $action == wireless ]]; then
+	elif [[ $action == automated || $action == camera || $action == category || $action == internal-storage || $action == lights || $action == quiet || $action == storage || $action == storage-write || $action == usb-cycle || $action == wireless ]]; then
 	:
 else
 	for required in alsactl alsaucm amixer aplay arecord pactl parec pw-play wpctl systemctl timeout python3; do
@@ -174,7 +184,7 @@ if [[ -n $cancel_file ]]; then
 				printf "CANCELLATION_REQUESTED: stopping the active test and restoring hardware state\n"
 				rm -f -- "$cancel_file"
 				kill -TERM -- "-$owner_pgid" 2>/dev/null || true
-				for _ in {1..150}; do
+				for _ in {1..300}; do
 					owner_state=$(ps -o stat= -p "$owner_pid" 2>/dev/null || true)
 					[[ -n $owner_state && $owner_state != Z* ]] || exit 0
 					sleep 0.2
@@ -205,11 +215,27 @@ if [[ $action == camera ]]; then
 	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-camera.sh" --yes --output "$output_dir"
 fi
 
-if [[ $action == controls || $action == inputs || $action == lights || $action == modes || $action == rotation || $action == storage || $action == storage-write || $action == wireless ]]; then
+if [[ $action == usb-cycle ]]; then
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-usb-cycle.sh" --timeout "$mode_timeout" --output "$output_dir"
+fi
+
+if [[ $action == sensor-interactions ]]; then
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-sensor-interactions.sh" \
+		--timeout "$mode_timeout" --output "$output_dir"
+fi
+
+if [[ $action == internal-storage ]]; then
+	exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-internal-storage.sh" --output "$output_dir"
+fi
+
+if [[ $action == controls || $action == inputs || $action == lights || $action == modes || $action == pen-mapping || $action == rotation || $action == storage || $action == storage-write || $action == wireless ]]; then
 	active_args=(--output "$output_dir")
-	[[ $action == controls || $action == modes || $action == rotation ]] && active_args+=(--timeout "$mode_timeout")
+	[[ $action == controls || $action == modes || $action == pen-mapping || $action == rotation ]] && active_args+=(--timeout "$mode_timeout")
 	if [[ $action == rotation ]]; then
 		exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-modes.sh" --all-orientations "${active_args[@]}"
+	fi
+	if [[ $action == pen-mapping ]]; then
+		exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-modes.sh" --pen-mapping "${active_args[@]}"
 	fi
 	if [[ $action == storage-write ]]; then
 		exec env YBV_ACTIVE_DISPATCH=1 "$LIBEXEC_DIR/yogabook-validator-storage.sh" --write-test "${active_args[@]}"
@@ -218,6 +244,13 @@ if [[ $action == controls || $action == inputs || $action == lights || $action =
 fi
 
 ybv_begin_report "$action" "$output_dir"
+if [[ $action == audio || $action == headset || $action == suspend ]]; then
+	ybv_register_state_keys \
+		'user-service:*:pipewire.service' \
+		'user-service:*:pipewire-pulse.service' \
+		'user-service:*:wireplumber.service' \
+		'desktop:audio-profile' 'audio:alsa-control:*'
+fi
 
 finish_report_for_user() {
 	local finish_rc=0
@@ -282,6 +315,8 @@ PY
 		device="/dev/${haptic}_vibrator"
 		if [[ -e $device ]]; then
 			run_haptic "$haptic" "$device"
+		elif grep -Fq 'N: Name="Wacom HID 169 Pen"' /proc/bus/input/devices 2>/dev/null; then
+			ybv_emit input "haptic-$haptic" SKIP "$haptic Halo haptic actuator is inactive in drawing mode" "$device"
 		else
 			ybv_emit input "haptic-$haptic" FAIL "$haptic Halo haptic device is missing" "$device"
 		fi
@@ -330,6 +365,9 @@ desktop_card=
 desktop_profile=
 playback_log="$YBV_REPORT_DIR/suspend-playback.log"
 capture_log="$YBV_REPORT_DIR/suspend-capture.log"
+resume_before="$YBV_REPORT_DIR/resume-before.json"
+resume_after="$YBV_REPORT_DIR/resume-after.json"
+resume_results="$YBV_REPORT_DIR/.resume-results.tsv"
 
 python3 - "$tone_file" "$silence_file" <<'PY'
 import math, struct, sys, wave
@@ -344,10 +382,9 @@ with wave.open(sys.argv[2], "wb") as wav:
     wav.writeframes(b"\0" * rate * 2 * 2)
 PY
 
-desktop_audio_probe() {
+desktop_audio_probe_impl() {
 	local monitor_pid playback_probe_pid playback_rc=0 monitor_rc=0
-	local default_sink='' sink_running=false pcm_running=false signal='' probe_asset="$tone_file" route='speakers' probe_bytes=0
-	[[ $action != headset ]] || probe_asset=$silence_file
+	local default_sink='' sink_running=false pcm_running=false signal='' route='speakers' probe_bytes=0
 
 	: >"$desktop_probe_file"
 	default_sink=$(ybv_run_as_user "$real_user" timeout 3 pactl get-default-sink 2>/dev/null) || return 1
@@ -355,7 +392,9 @@ desktop_audio_probe() {
 		--format=s16le --rate=48000 --channels=2 --raw >"$desktop_probe_file" 2>>"$YBV_LOG" &
 	monitor_pid=$!
 	sleep 0.5
-	ybv_run_as_user "$real_user" timeout 5 pw-play "$probe_asset" >>"$YBV_LOG" 2>&1 &
+	# The exact user mixer state is already restored here. Keep this transport
+	# probe silent so it cannot produce an unbounded second tone.
+	ybv_run_as_user "$real_user" timeout 5 pw-play "$silence_file" >>"$YBV_LOG" 2>&1 &
 	playback_probe_pid=$!
 	for _ in {1..20}; do
 		if ybv_run_as_user "$real_user" timeout 2 pactl list sinks short 2>/dev/null |
@@ -394,23 +433,19 @@ desktop_audio_probe() {
 		amixer -c yogabook cget name='Sto1 ADC MIXR ADC1 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' || return 1
 		;;
 	esac
-	if [[ $action == headset ]]; then
-		probe_bytes=$(wc -c <"$desktop_probe_file")
-		((probe_bytes > 0)) || return 1
-		signal="bytes=$probe_bytes silent=yes"
-	else
-		signal=$(python3 - "$desktop_probe_file" <<'PY'
-import math, struct, sys
-raw = open(sys.argv[1], "rb").read()
-samples = struct.unpack(f"<{len(raw)//2}h", raw) if raw else ()
-peak = max(map(abs, samples), default=0)
-rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
-print(f"bytes={len(raw)} peak={peak} rms={rms:.2f}")
-raise SystemExit(0 if peak and rms else 1)
-PY
-		) || return 1
-	fi
+	probe_bytes=$(wc -c <"$desktop_probe_file")
+	((probe_bytes > 0)) || return 1
+	signal="bytes=$probe_bytes silent=yes"
 	printf 'desktop probe: sink=RUNNING pcm0=RUNNING route=%s %s\n' "$route" "$signal" >>"$YBV_LOG"
+}
+
+desktop_audio_probe() {
+	local probe_rc=0
+	desktop_audio_probe_impl || probe_rc=$?
+	# A sink monitor can contain concurrent notifications, media or conversation.
+	# Retain only its byte count in the log, regardless of how the probe exits.
+	rm -f -- "$desktop_probe_file"
+	return "$probe_rc"
 }
 
 restore_state() {
@@ -420,6 +455,9 @@ restore_state() {
 		kill -TERM "$pid" 2>/dev/null || true
 		wait "$pid" 2>/dev/null || true
 	done
+	# Captures may contain ambient conversation. Retain only derived metrics,
+	# including on cancellation or an analyzer failure.
+	rm -f -- "$capture_file"
 	if [[ $state_saved == true ]]; then
 		alsactl -f "$state_file" restore yogabook >/dev/null 2>&1 || restore_rc=1
 	fi
@@ -478,13 +516,17 @@ restore_state() {
 		done
 		((desktop_rc == 0)) || restore_rc=1
 	fi
+	# Raw audio and machine-specific mixer state are never report evidence.
+	rm -f -- "$capture_file" "$desktop_probe_file" "$state_file" "$tone_file" "$silence_file"
 	if [[ -n $real_user && -d $YBV_REPORT_DIR ]]; then
 		ybv_chown_tree_to_user "$real_user" "$YBV_REPORT_DIR" 2>/dev/null || true
 	fi
 	return "$restore_rc"
 }
 ybv_register_restore_callback restore_state
-trap 'restore_state || true' EXIT INT TERM
+trap 'restore_state || true' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Save before stopping WirePlumber: closing its UCM session temporarily disables
 # output routes, and saving after that point would persist a muted speaker.
@@ -523,12 +565,23 @@ if [[ -n $real_user ]]; then
 	# WirePlumber owns the ALSA/UCM nodes. Stopping only the session manager
 	# releases the PCM devices; restoration later resets the complete graph so
 	# existing desktop clients cannot retain stale links.
-	ybv_run_as_user "$real_user" systemctl --user stop wireplumber || true
-	wireplumber_stopped=true
+	if ybv_run_as_user "$real_user" systemctl --user stop wireplumber.service &&
+		! ybv_run_as_user "$real_user" systemctl --user is-active --quiet wireplumber.service; then
+		wireplumber_stopped=true
+	else
+		ybv_emit audio exclusive-access FAIL 'Could not stop the desktop audio session manager safely'
+		ybv_finish_report
+		exit 1
+	fi
 	sleep 2
 fi
 
-if ybv_has_command fuser && fuser /dev/snd/pcm* >/dev/null 2>&1; then
+ybv_has_command fuser || {
+	ybv_emit audio exclusive-access FAIL 'Required PCM ownership checker is unavailable' 'missing=fuser'
+	ybv_finish_report
+	exit 1
+}
+if fuser /dev/snd/pcm* >/dev/null 2>&1; then
 	ybv_capture 'PCM users after stopping desktop audio' fuser -v /dev/snd/pcm*
 	ybv_emit audio exclusive-access FAIL 'A PCM device remains open'
 	ybv_finish_report
@@ -544,10 +597,29 @@ else
 	ucm_playback=Speaker1
 	ucm_capture=Mic1
 fi
+ucm_routes_ready=false
 if alsaucm -c hw:yogabook set _verb HiFi set _enadev "$ucm_playback" set _enadev "$ucm_capture" >>"$YBV_LOG" 2>&1; then
-	ybv_emit audio ucm-routes PASS "Enabled HiFi $ucm_playback and $ucm_capture routes"
+	if [[ $action == headset ]]; then
+		if amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(off|0)' &&
+			amixer -c yogabook cget name='Headphone Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' &&
+			amixer -c yogabook cget name='Headset Mic Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' &&
+			amixer -c yogabook cget name='Sto1 ADC MIXL ADC1 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' &&
+			amixer -c yogabook cget name='Sto1 ADC MIXR ADC1 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)'; then
+			ucm_routes_ready=true
+		fi
+	elif amixer -c yogabook cget name='Speaker Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' &&
+		amixer -c yogabook cget name='Int Mic Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' &&
+		amixer -c yogabook cget name='Sto1 ADC MIXL ADC2 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)' &&
+		amixer -c yogabook cget name='Sto1 ADC MIXR ADC2 Switch' 2>>"$YBV_LOG" | grep -Eq 'values=(on|1)'; then
+		ucm_routes_ready=true
+	fi
+fi
+if [[ $ucm_routes_ready == true ]]; then
+	ybv_emit audio ucm-routes PASS "Enabled and verified HiFi $ucm_playback and $ucm_capture routes"
 else
 	ybv_emit audio ucm-routes FAIL 'Could not enable UCM audio routes'
+	ybv_finish_report
+	exit 1
 fi
 
 if [[ $action != suspend ]]; then
@@ -593,14 +665,14 @@ if [[ $action == audio ]]; then
 		aplay -q -D hw:yogabook,1 -t raw -f S32_LE -r 48000 -c 2 -d 1 /dev/zero
 
 	if timeout 15 aplay -q -D hw:yogabook,0 "$tone_file" >>"$YBV_LOG" 2>&1; then
-		ybv_emit audio speaker-tone PASS 'Played bounded one-second 440 Hz tone at 8% digital amplitude'
+		ybv_emit audio speaker-tone PASS 'Bounded speaker transport completed; audibility and quality remain physical acceptance' 'one-second 440 Hz tone at 8% digital amplitude'
 	else
 		# PCM1 teardown can transiently race the following PCM0 write on this
 		# SOF IPC3 platform. Preserve that evidence and distinguish recovery
 		# from a persistent playback failure.
 		sleep 1
 		if timeout 15 aplay -q -D hw:yogabook,0 "$tone_file" >>"$YBV_LOG" 2>&1; then
-			ybv_emit audio speaker-tone-retry WARN 'PCM0 tone recovered on one retry after the deep-buffer transition'
+			ybv_emit audio speaker-tone WARN 'Bounded speaker transport recovered on one retry after the deep-buffer transition; audibility and quality remain physical acceptance'
 		else
 			ybv_emit audio speaker-tone FAIL 'Bounded speaker tone failed twice after the deep-buffer transition'
 		fi
@@ -608,21 +680,14 @@ if [[ $action == audio ]]; then
 	run_pcm mic-capture 'Recorded three-second Mic1 WAV' \
 		arecord -q -D hw:yogabook,0 -t wav -f S16_LE -r 48000 -c 2 -d 3 "$capture_file"
 	if [[ -s $capture_file ]]; then
-		if signal=$(python3 - "$capture_file" <<'PY'
-import math, struct, sys, wave
-with wave.open(sys.argv[1], "rb") as wav:
-    frames = wav.readframes(wav.getnframes())
-samples = struct.unpack(f"<{len(frames)//2}h", frames) if frames else ()
-peak = max(map(abs, samples), default=0)
-rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
-print(f"peak={peak} ({peak/32768:.6f} FS), rms={rms:.2f} ({rms/32768:.6f} FS)")
-raise SystemExit(0 if peak and rms else 1)
-PY
-		); then
-			ybv_emit audio mic-signal PASS 'Mic1 capture contains a non-empty signal' "$signal"
-		else
-			ybv_emit audio mic-signal FAIL 'Mic1 capture is digitally empty' "${signal:-no samples}"
-		fi
+		signal=$(python3 "$LIBEXEC_DIR/yogabook-validator-audio-analyze.py" --expected-seconds 3 "$capture_file")
+		rm -f -- "$capture_file"
+		IFS=$'\t' read -r signal_status signal_details <<<"$signal"
+		case $signal_status in
+		PASS) ybv_emit audio mic-signal PASS 'Mic1 transport contains a plausible non-clipped stereo signal; intelligibility remains physical acceptance' "$signal_details" ;;
+		WARN) ybv_emit audio mic-signal WARN 'Mic1 transport works but has notable DC offset or channel imbalance' "$signal_details" ;;
+		*) ybv_emit audio mic-signal FAIL 'Mic1 transport is empty, stuck, clipped, DC-biased or severely imbalanced' "${signal_details:-analyzer produced no result}" ;;
+		esac
 	else
 		ybv_emit audio mic-signal FAIL 'Mic1 WAV was not created'
 	fi
@@ -643,22 +708,14 @@ elif [[ $action == headset ]]; then
 	if [[ $headset_capture_ready == true ]] &&
 		timeout 15 arecord -q -D hw:yogabook,0 -t wav -f S16_LE -r 48000 -c 2 -d 3 "$capture_file" >>"$YBV_LOG" 2>&1 &&
 		[[ -s $capture_file ]]; then
-		if signal=$(python3 - "$capture_file" <<'PY'
-import math, struct, sys, wave
-with wave.open(sys.argv[1], "rb") as wav:
-    frames = wav.readframes(wav.getnframes())
-samples = struct.unpack(f"<{len(frames)//2}h", frames) if frames else ()
-peak = max(map(abs, samples), default=0)
-rms = math.sqrt(sum(x*x for x in samples) / len(samples)) if samples else 0
-clipped = sum(abs(x) >= 32760 for x in samples) / len(samples) if samples else 1
-print(f"peak={peak} ({peak/32768:.6f} FS), rms={rms:.2f} ({rms/32768:.6f} FS), clipped={clipped:.6f}")
-raise SystemExit(0 if peak >= 32 and rms >= 1 and clipped < 0.05 else 1)
-PY
-		); then
-			ybv_emit audio headset-capture PASS 'Headset microphone capture contains a plausible non-clipped signal' "$signal"
-		else
-			ybv_emit audio headset-capture FAIL 'Headset microphone capture is empty, implausibly weak or clipped' "${signal:-no samples}"
-		fi
+		signal=$(python3 "$LIBEXEC_DIR/yogabook-validator-audio-analyze.py" --expected-seconds 3 "$capture_file")
+		rm -f -- "$capture_file"
+		IFS=$'\t' read -r signal_status signal_details <<<"$signal"
+		case $signal_status in
+		PASS) ybv_emit audio headset-capture PASS 'Headset microphone transport contains a plausible non-clipped stereo signal' "$signal_details" ;;
+		WARN) ybv_emit audio headset-capture WARN 'Headset microphone transport works but has notable DC offset or channel imbalance' "$signal_details" ;;
+		*) ybv_emit audio headset-capture FAIL 'Headset microphone transport is empty, stuck, clipped, DC-biased or severely imbalanced' "${signal_details:-analyzer produced no result}" ;;
+		esac
 	else
 		ybv_emit audio headset-capture FAIL 'Headset microphone route or three-second capture failed' "route-ready=$headset_capture_ready"
 	fi
@@ -673,6 +730,13 @@ PY
 		ybv_emit input headset-events FAIL 'Headset event cycle did not complete with the jack reinserted' "exit=$headset_event_rc ${headset_event_details:-no events}"
 	fi
 else
+	resume_baseline_ready=false
+	if python3 "$LIBEXEC_DIR/yogabook-validator-resume.py" --capture "$resume_before" >>"$YBV_LOG" 2>&1; then
+		resume_baseline_ready=true
+		ybv_emit suspend resume-baseline PASS 'Captured the pre-suspend health and topology baseline' 'subsystems=11'
+	else
+		ybv_emit suspend resume-baseline FAIL 'Could not capture the pre-suspend hardware health baseline'
+	fi
 	stream_seconds=$((suspend_seconds + 14))
 	test_start=$(date --iso-8601=seconds)
 	timeout "$((stream_seconds + 10))" aplay -q -D hw:yogabook,0 -t raw -f S32_LE -r 48000 -c 2 -d "$stream_seconds" /dev/zero >"$playback_log" 2>&1 &
@@ -689,6 +753,24 @@ else
 		ybv_emit suspend rtcwake PASS 'Tablet resumed from suspend' "${suspend_seconds}s requested"
 	else
 		ybv_emit suspend rtcwake FAIL 'rtcwake suspend/resume failed'
+	fi
+	sleep 5
+	if [[ $resume_baseline_ready == true ]] &&
+		python3 "$LIBEXEC_DIR/yogabook-validator-resume.py" --capture "$resume_after" >>"$YBV_LOG" 2>&1 &&
+		python3 "$LIBEXEC_DIR/yogabook-validator-resume.py" --compare "$resume_before" "$resume_after" >"$resume_results"; then
+		while IFS=$'\t' read -r resume_check resume_status resume_summary resume_details; do
+			[[ -n $resume_check ]] || continue
+			ybv_emit suspend "$resume_check" "$resume_status" "$resume_summary" "$resume_details"
+		done <"$resume_results"
+		rm -f -- "$resume_results"
+	else
+		for resume_check in resume-display resume-inputs resume-sensors resume-wifi \
+			resume-bluetooth resume-camera resume-power resume-storage resume-modem \
+			resume-gnss resume-services; do
+			ybv_emit suspend "$resume_check" FAIL \
+				'Post-resume subsystem health could not be captured or compared' \
+				'blocked_by=suspend/resume-baseline'
+		done
 	fi
 	if wait "$playback_pid"; then ybv_emit suspend playback-after PASS 'Playback completed after resume'; else ybv_emit suspend playback-after FAIL 'Playback failed across suspend'; fi
 	playback_pid=
@@ -729,7 +811,7 @@ if restore_state; then
 		if [[ $action == headset ]]; then
 			ybv_emit audio state-restore PASS 'Restored ALSA state and verified silent desktop playback transport through the original sink' "ready after ${desktop_ready_seconds}s"
 		else
-			ybv_emit audio state-restore PASS 'Restored ALSA state and verified desktop playback through the original sink' "ready after ${desktop_ready_seconds}s"
+			ybv_emit audio state-restore PASS 'Restored ALSA state and verified silent desktop playback transport through the original sink' "ready after ${desktop_ready_seconds}s"
 		fi
 	else
 		ybv_emit audio state-restore PASS 'Restored ALSA state; no desktop user services were managed'

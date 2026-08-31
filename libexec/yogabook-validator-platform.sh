@@ -245,16 +245,27 @@ if ybv_has_command systemctl; then
 		ybv_emit platform failed-units PASS 'No system service is currently failed'
 	else
 		failed_count=$(awk -F, '{print NF}' <<<"$failed_units")
-		ybv_emit platform failed-units INFO 'One or more unrelated system services are failed' "count=$failed_count units=$failed_units"
+		ybv_emit platform failed-units WARN 'One or more system services are failed' "count=$failed_count units=$failed_units"
 	fi
 else
 	ybv_emit platform failed-units SKIP 'systemctl is unavailable'
 fi
 
 if ybv_has_command journalctl; then
-	journal_errors=$(journalctl -b -k --no-pager 2>/dev/null | grep -Ei \
-		'(mmcblk[0-9]+|mmc[0-9]+).*(I/O error|timed out|timeout|CRC error)|EXT4-fs error|remounting filesystem read-only|i915.*(GPU HANG|wedged|reset failed)|thermal.*(critical|trip.*failed)|watchdog: BUG: soft lockup|rcu:.*stall' || true)
-	if [[ -z $journal_errors ]]; then
+	root_block=${root_source##*/}
+	root_block=${root_block%%\[*}
+	journal_rc=0
+	journal_output=$(journalctl -b -k --no-pager 2>/dev/null) || journal_rc=$?
+	IFS=$'\t' read -r storage_status storage_summary storage_details < <(
+		ybv_classify_root_storage_journal "$emmc_name" "$root_block" "$journal_rc" <<<"$journal_output"
+	)
+	ybv_emit storage root-kernel-errors "$storage_status" "$storage_summary" "$storage_details"
+
+	journal_errors=$(grep -Ei \
+		'(mmcblk[0-9]+|mmc[0-9]+).*(I/O error|timed out|timeout|CRC error)|EXT4-fs error|remounting filesystem read-only|i915.*(GPU HANG|wedged|reset failed)|thermal.*(critical|trip.*failed)|watchdog: BUG: soft lockup|rcu:.*stall' <<<"$journal_output" || true)
+	if ((journal_rc != 0)); then
+		ybv_emit platform kernel-errors SKIP 'Kernel journal could not be read for the targeted platform scan' "exit=$journal_rc"
+	elif [[ -z $journal_errors ]]; then
 		ybv_emit platform kernel-errors PASS 'No targeted storage, GPU, thermal or lockup errors occurred in this boot'
 	else
 		ybv_emit platform kernel-errors FAIL 'Targeted platform errors occurred in this boot' "$(head -n 1 <<<"$journal_errors")"

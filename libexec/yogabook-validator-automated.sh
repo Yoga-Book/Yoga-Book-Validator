@@ -65,15 +65,19 @@ run_subtest() {
 }
 
 run_subtest check run_as_desktop "$LIBEXEC_DIR/yogabook-validator-check.sh"
-run_subtest platform run_as_desktop "$LIBEXEC_DIR/yogabook-validator-platform.sh"
+run_subtest apt run_as_desktop "$LIBEXEC_DIR/yogabook-validator-apt.sh"
+run_subtest platform "$LIBEXEC_DIR/yogabook-validator-platform.sh"
+run_subtest internal-storage "$LIBEXEC_DIR/yogabook-validator-active.sh" internal-storage --yes
 run_subtest display run_as_desktop "$LIBEXEC_DIR/yogabook-validator-display.sh"
 run_subtest sensors run_as_desktop "$LIBEXEC_DIR/yogabook-validator-sensors.sh"
 run_subtest power run_as_desktop "$LIBEXEC_DIR/yogabook-validator-power.sh"
+run_subtest charging run_as_desktop "$LIBEXEC_DIR/yogabook-validator-charging.sh"
 run_subtest usb run_as_desktop "$LIBEXEC_DIR/yogabook-validator-usb.sh"
 run_subtest modem run_as_desktop "$LIBEXEC_DIR/yogabook-validator-modem.sh"
 run_subtest gnss run_as_desktop "$LIBEXEC_DIR/yogabook-validator-gnss.sh"
 run_subtest camera "$LIBEXEC_DIR/yogabook-validator-camera.sh" --yes
 run_subtest inputs "$LIBEXEC_DIR/yogabook-validator-active.sh" inputs --yes
+run_subtest pen-stack run_as_desktop "$LIBEXEC_DIR/yogabook-validator-pen-stack.sh"
 run_subtest storage "$LIBEXEC_DIR/yogabook-validator-active.sh" storage --yes
 run_subtest wireless "$LIBEXEC_DIR/yogabook-validator-active.sh" wireless --yes
 run_subtest lights "$LIBEXEC_DIR/yogabook-validator-active.sh" lights --yes
@@ -102,7 +106,10 @@ else
 	ybv_emit suite audio-final-state FAIL 'PipeWire did not retain both Yoga Book audio endpoints after active tests'
 fi
 
-critical_services=(halo-keyboard.service yogabook-camera.service iio-sensor-proxy.service bluetooth.service ModemManager.service)
+critical_services=(yogabook-camera.service iio-sensor-proxy.service bluetooth.service ModemManager.service)
+if ! grep -Fq 'N: Name="Wacom HID 169 Pen"' /proc/bus/input/devices 2>/dev/null; then
+	critical_services+=(halo-keyboard.service)
+fi
 inactive_services=()
 for service in "${critical_services[@]}"; do
 	systemctl is-active --quiet "$service" || inactive_services+=("$service")

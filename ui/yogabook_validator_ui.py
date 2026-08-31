@@ -12,6 +12,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 from datetime import datetime
 
@@ -26,6 +27,19 @@ APP_ID = "org.yogabook.Validator"
 INSTALLED_CLI = Path("/usr/bin/yogabook-validator")
 SOURCE_CLI = Path(__file__).resolve().parents[1] / "src" / "yogabook-validator.sh"
 CLI = Path(os.environ.get("YBV_CLI", INSTALLED_CLI if INSTALLED_CLI.exists() else SOURCE_CLI))
+SOURCE_ROOT = Path(__file__).resolve().parents[1]
+INSTALLED_PHYSICAL_IMPORT = Path("/usr/libexec/yogabook-validator/yogabook-validator-physical-import.py")
+PHYSICAL_IMPORT = (
+    INSTALLED_PHYSICAL_IMPORT
+    if INSTALLED_PHYSICAL_IMPORT.exists()
+    else SOURCE_ROOT / "libexec" / "yogabook-validator-physical-import.py"
+)
+INSTALLED_ACCEPTANCE_MATRIX = Path("/usr/share/yogabook-validator/acceptance.json")
+ACCEPTANCE_MATRIX = (
+    INSTALLED_ACCEPTANCE_MATRIX
+    if INSTALLED_ACCEPTANCE_MATRIX.exists()
+    else SOURCE_ROOT / "data" / "acceptance.json"
+)
 ACTIVE_COMMANDS = {
     "audio",
     "automated",
@@ -35,14 +49,56 @@ ACTIVE_COMMANDS = {
     "haptics",
     "headset",
     "inputs",
+    "internal-storage",
     "lights",
     "modes",
+    "pen-mapping",
     "quiet",
     "rotation",
+    "sensor-interactions",
     "storage",
     "storage-write",
     "suspend",
+    "usb-cycle",
     "wireless",
+}
+
+# Report action IDs are untrusted data. Only IDs in this local allowlist may
+# dispatch an existing UI callback; report-provided command text is never run.
+EXECUTION_ACTION_HANDLERS = {
+    "audit": "on_audit",
+    "apt": "on_apt",
+    "audio": "on_audio",
+    "camera": "on_camera",
+    "charging": "on_charging",
+    "controls": "on_controls",
+    "display": "on_display",
+    "gnss": "on_gnss",
+    "haptics": "on_haptics",
+    "hdmi": "on_display",
+    "headset": "on_headset",
+    "inputs": "on_inputs",
+    "internal-storage": "on_internal_storage",
+    "lights": "on_lights",
+    "modem": "on_modem",
+    "modes": "on_modes",
+    "pen-stack": "on_pen_stack",
+    "pen-mapping": "on_pen_mapping",
+    "physical": "on_physical",
+    "platform": "on_platform",
+    "power": "on_power",
+    "recapture-evidence": "on_passive",
+    "resources": "on_resources",
+    "rotation": "on_rotation",
+    "sensor-interactions": "on_sensor_interactions",
+    "sensors": "on_sensors",
+    "stability": "on_stability_start",
+    "storage": "on_storage",
+    "storage-write": "on_storage_write",
+    "suspend": "on_suspend",
+    "usb": "on_usb",
+    "usb-cycle": "on_usb_cycle",
+    "wireless": "on_wireless",
 }
 
 PHYSICAL_CHECKS = [
@@ -62,6 +118,9 @@ PHYSICAL_CHECKS = [
     ("display-touch", "Display touchscreen works in keyboard and pen modes"),
     ("display-stability", "Display image remains stable without corruption or flicker"),
     ("auto-rotation", "Display rotates correctly and returns to landscape"),
+    ("ambient-light-response", "Shading and exposing the ambient-light sensors changes the reported light level"),
+    ("proximity-response", "Moving a hand near and away from the SX9310 changes its proximity state"),
+    ("hinge-angle", "Opening and folding the Yoga Book changes both reported hinge angles consistently"),
     ("display-brightness", "Display brightness changes smoothly under manual control"),
     ("micro-hdmi", "Micro-HDMI outputs video and audio to an external display"),
     ("front-camera", "Front camera produces a usable image"),
@@ -69,6 +128,7 @@ PHYSICAL_CHECKS = [
     ("wifi", "Wi-Fi connects and transfers data reliably"),
     ("bluetooth", "Bluetooth can discover, pair and exchange data or audio"),
     ("usb-otg", "Micro-USB OTG detects and cleanly removes an attached device"),
+    ("internal-storage", "Applications can save and reopen data on internal storage across a cold boot"),
     ("sd-card", "Inserted SD card can be read and written"),
     ("hardware-buttons", "Power and volume buttons generate the expected actions"),
     ("lid-switch", "Lid or keyboard-cover state is detected correctly"),
@@ -111,11 +171,15 @@ PHYSICAL_GROUPS = [
         ],
     ),
     (
+        "Sensors and orientation",
+        "Confirm physical response from the accelerometers, ambient-light, proximity and hinge sensors.",
+        ["auto-rotation", "ambient-light-response", "proximity-response", "hinge-angle"],
+    ),
+    (
         "Display, cameras and indicators",
         "Confirm image quality, orientation, brightness and externally visible indicators.",
         [
             "display-stability",
-            "auto-rotation",
             "display-brightness",
             "micro-hdmi",
             "front-camera",
@@ -125,8 +189,8 @@ PHYSICAL_GROUPS = [
     ),
     (
         "Connectivity and storage",
-        "Confirm real accessories, radio links, removable media and outdoor positioning.",
-        ["wifi", "bluetooth", "usb-otg", "sd-card", "lte-data", "gnss"],
+        "Confirm internal-data persistence, real accessories, radio links, removable media and outdoor positioning.",
+        ["wifi", "bluetooth", "usb-otg", "internal-storage", "sd-card", "lte-data", "gnss"],
     ),
     (
         "Power and reliability",
@@ -149,6 +213,13 @@ def results_root() -> Path:
     path = base / "Yoga Book Validator"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def validation_search_matches(query: str, *fields: str) -> bool:
+    """Match every case-insensitive query token across the supplied metadata."""
+    tokens = query.casefold().split()
+    searchable_text = " ".join(fields).casefold()
+    return all(token in searchable_text for token in tokens)
 
 
 class ValidatorWindow(Adw.ApplicationWindow):
@@ -221,6 +292,29 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.run_button_icons: dict[Gtk.Button, Gtk.Image] = {}
         self.run_button_tooltips: dict[Gtk.Button, str] = {}
         self.subtest_buttons: dict[str, Gtk.Button] = {}
+        self.validation_groups: list[
+            tuple[Adw.PreferencesGroup, str, list[tuple[Adw.ActionRow, str, Gtk.Button]]]
+        ] = []
+        self.validation_button_groups: dict[Gtk.Button, Adw.PreferencesGroup] = {}
+
+        search_group = Adw.PreferencesGroup()
+        search_box = Gtk.Box()
+        search_box.set_margin_bottom(4)
+        self.validation_search = Gtk.SearchEntry()
+        self.validation_search.set_hexpand(True)
+        self.validation_search.set_placeholder_text("Search tests by name, description, or category")
+        self.validation_search.set_tooltip_text("Filter the validation tests shown below")
+        self.validation_search.update_property(
+            [Gtk.AccessibleProperty.LABEL],
+            ["Search validation tests"],
+        )
+        self.validation_search.set_key_capture_widget(self)
+        self.validation_search.connect("search-changed", self.on_validation_search_changed)
+        self.validation_search.connect("stop-search", self.on_validation_search_stopped)
+        search_box.append(self.validation_search)
+        search_group.add(search_box)
+        page.add(search_group)
+
         category_actions = {
             "Recommended workflows": (
                 "recommended",
@@ -229,13 +323,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
             ),
             "Audio and media": (
                 "audio-media",
-                "Run display, camera, light, audio and headset checks?",
-                "The checks run sequentially. Camera routes, lights and audio state are restored after each test; quiet speaker and headphone tones are audible. A connected four-pole headset requires one guided unplug, reinsert and button cycle.",
+                "Run all automatic audio and media checks?",
+                "The unattended checks run sequentially. Camera routes, lights and audio state are restored after each test; one quiet speaker tone is audible.",
             ),
-            "Input and device modes": (
+            "Input and sensors": (
                 "input-modes",
-                "Run all input and mode checks?",
-                "This interactive sequence inspects capabilities, safely observes Power, Volume and lid events, pulses both haptics, then asks you to switch between keyboard and pen modes and rotate through all four orientations.",
+                "Run all automatic input and sensor checks?",
+                "The unattended sequence inspects input capabilities, pulses both haptics and verifies the complete Halo, Wacom, libwacom, Mutter and orientation stack without injecting events or changing device mode.",
             ),
             "Platform and power": (
                 "platform-power",
@@ -245,17 +339,12 @@ class ValidatorWindow(Adw.ApplicationWindow):
             "Connectivity and storage": (
                 "connectivity-storage",
                 "Run all connectivity and storage checks?",
-                "The checks run sequentially and restore radio and mount state. The final SD test writes, verifies, synchronizes and removes one bounded 64 KiB file from each writable filesystem.",
+                "The checks run sequentially and restore radio and mount state. They exercise one bounded 4 MiB file on the internal root filesystem, then write, verify, synchronize and remove one bounded 64 KiB file from each writable SD filesystem.",
             ),
             "Reliability": (
                 "reliability",
                 "Run all currently applicable reliability checks?",
                 "The suite performs suspend/resume, then automatically starts, advances or confirms cold-boot tracking. If this boot was already counted, it records that a physical cold boot is required instead of producing a false failure.",
-            ),
-            "Physical acceptance": (
-                "physical",
-                "",
-                "",
             ),
         }
         validation_sections = [
@@ -264,7 +353,6 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 "Build a complete evidence dossier or run a new health assessment.",
                 [
                     ("Build acceptance dossier", "Combine selected same-version reports with integrity and provenance checks", self.on_dossier, True),
-                    ("Run passive + physical acceptance", "Combine deep passive diagnostics and guided physical observations", self.on_full, False),
                     ("Run automated suite", "All non-guided transport checks except suspend, with one authorization", self.on_automated, False),
                     ("Run quiet diagnostics", "All automated checks that do not play, record, vibrate, suspend, or require guidance", self.on_quiet, False),
                     ("Run full passive suite", "All deep read-only checks in one merged report", self.on_passive, False),
@@ -275,31 +363,30 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 "Audio and media",
                 "Sound, cameras, display transport and visible hardware controls.",
                 [
-                    ("Test audio", "Exclusive PCM tests, a quiet tone, and microphone capture", self.on_audio, False),
-                    ("Test wired headset", "Validate headphone output, headset microphone, jack transitions, and one media button", self.on_headset, False),
+                    ("Test audio", "Exclusive PCM transports, a quiet tone, and microphone signal analysis", self.on_audio, False),
                     ("Test cameras", "Analyze both sensors and exercise one rear-focus step", self.on_camera, False),
                     ("Inspect display", "Validate i915, DSI, Micro-HDMI video/audio, and desktop policy", self.on_display, False),
                     ("Test lights", "Exercise and restore the panel, Halo, indicator, and charging lights", self.on_lights, False),
                 ],
             ),
             (
-                "Input and device modes",
-                "Halo keyboard, touch, pen, haptics and orientation transitions.",
+                "Input and sensors",
+                "Unattended capability, haptic and pen-mapping stack checks.",
                 [
                     ("Inspect inputs", "Validate key, switch, touch, pen, jack, and haptic capability maps", self.on_inputs, False),
-                    ("Test buttons and lid", "Observe Power, Volume and lid events while suppressing system actions", self.on_controls, False),
                     ("Test haptics", "Pulse the left and right Halo actuators for 150 ms", self.on_haptics, False),
-                    ("Test keyboard/pen modes", "Observe one physical keyboard to pen to keyboard transition", self.on_modes, False),
-                    ("Test automatic rotation", "Verify all four sensor orientations and return upright", self.on_rotation, False),
+                    ("Inspect pen mapping stack", "Verify Wacom, Halo, libwacom, Mutter and current orientation without synthetic input", self.on_pen_stack, False),
                 ],
             ),
             (
                 "Platform and power",
-                "Core SoC integration, sensors, thermal safeguards and charging.",
+                "Software sources, core SoC integration, sensors, thermal safeguards and charging.",
                 [
-                    ("Inspect platform", "Validate SoC drivers, CPU power, thermals, eMMC health, and RTC wake", self.on_platform, False),
+                    ("Check software sources", "Refresh signed APT release metadata in disposable cache directories", self.on_apt, False),
+                    ("Inspect platform", "Read-only validation of SoC drivers, CPU power, thermals and eMMC health", self.on_platform, False),
                     ("Inspect resources", "Profile Yoga Book services and verify thermal safeguards", self.on_resources, False),
                     ("Inspect power", "Validate battery, charger, fuel-gauge, and desktop telemetry", self.on_power, False),
+                    ("Observe charging", "Verify sustained charge progress or a stable full state", self.on_charging, False),
                     ("Test sensors", "Read every ambient-light, accelerometer, hinge, and proximity channel", self.on_sensors, False),
                 ],
             ),
@@ -309,8 +396,10 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 [
                     ("Test wireless", "Verify Wi-Fi plus Bluetooth features and RF reception", self.on_wireless, False),
                     ("Validate LTE", "Check SIM registration and an existing mobile-data bearer without changing it", self.on_modem, False),
+                    ("Validate GNSS", "Check private runtime, transport, gpsd, sky data and require an outdoor fix", self.on_gnss, False),
                     ("Inspect USB", "Validate xHCI hubs, role switch, modem transport, and attached accessories", self.on_usb, False),
                     ("Test storage", "Read the inserted SD card and mount filesystems read-only", self.on_storage, False),
+                    ("Test internal storage", "Write, verify, synchronize, and remove one bounded root-filesystem file", self.on_internal_storage, False),
                     ("Test SD writes", "Write, verify, synchronize, and remove a bounded test file", self.on_storage_write, False),
                 ],
             ),
@@ -324,9 +413,17 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 ],
             ),
             (
-                "Physical acceptance",
-                "Record behavior that software cannot prove automatically.",
+                "Guided physical validation",
+                "Optional end-to-end observations excluded from every automatic category runner.",
                 [
+                    ("Run passive + physical acceptance", "Combine deep passive diagnostics and guided physical observations", self.on_full, False),
+                    ("Validate wired headset controls", "Guided unplug, insertion and media-button observation", self.on_headset, False),
+                    ("Validate buttons and lid", "Guided Power, Volume and lid-event observation", self.on_controls, False),
+                    ("Validate keyboard/pen transition", "Guided physical Halo-to-pen-to-Halo mode cycle", self.on_modes, False),
+                    ("Validate physical rotations", "Guided traversal of all four sensor orientations", self.on_rotation, False),
+                    ("Validate live sensor responses", "Guided light, proximity and hinge stimulation", self.on_sensor_interactions, False),
+                    ("Validate physical pen mapping", "Guided real-stylus targets across every orientation", self.on_pen_mapping, False),
+                    ("Validate USB OTG cycle", "Guided cable insertion, descriptor transfer and removal", self.on_usb_cycle, False),
                     ("Record physical observations", "Document what you can hear, touch, and observe", self.on_physical, False),
                 ],
             ),
@@ -334,6 +431,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         for section_title, section_description, section_rows in validation_sections:
             actions = Adw.PreferencesGroup(title=section_title, description=section_description)
             page.add(actions)
+            searchable_rows: list[tuple[Adw.ActionRow, str, Gtk.Button]] = []
             for title, subtitle, callback, suggested in section_rows:
                 row = Adw.ActionRow(title=title, subtitle=subtitle)
                 button = self.create_action_button("media-playback-start-symbolic", 18)
@@ -367,6 +465,13 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 if subtest_name == "audit":
                     subtest_name = "check"
                 self.subtest_buttons[subtest_name] = button
+                searchable_rows.append(
+                    (
+                        row,
+                        " ".join((title, subtitle, section_title, section_description, subtest_name)),
+                        button,
+                    )
+                )
                 row_status_slot = Gtk.Overlay()
                 row_status_slot.set_size_request(24, 24)
                 row_status_slot.set_valign(Gtk.Align.CENTER)
@@ -420,6 +525,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 self.run_button_tooltips[category_button] = category_tooltip
                 self.row_spinners[category_button] = category_spinner
                 self.row_status_icons[category_button] = category_status_icon
+                self.validation_button_groups[category_button] = actions
                 category_status_slot = Gtk.Overlay()
                 category_status_slot.set_size_request(24, 24)
                 category_status_slot.set_valign(Gtk.Align.CENTER)
@@ -432,6 +538,22 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 category_box.append(category_status_slot)
                 category_box.append(category_action_slot)
                 actions.set_header_suffix(category_box)
+
+            category_id = category_action[0] if category_action is not None else ""
+            section_search_text = " ".join((section_title, section_description, category_id))
+            self.validation_groups.append((actions, section_search_text, searchable_rows))
+
+        self.no_search_results = Adw.PreferencesGroup()
+        self.no_search_results.set_visible(False)
+        self.no_search_results_row = Adw.ActionRow(
+            title="No tests match your search",
+            subtitle="Try a test name, hardware feature, or category.",
+        )
+        no_results_icon = Gtk.Image.new_from_icon_name("edit-find-symbolic")
+        no_results_icon.set_pixel_size(24)
+        self.no_search_results_row.add_prefix(no_results_icon)
+        self.no_search_results.add(self.no_search_results_row)
+        page.add(self.no_search_results)
 
         self.summary = Adw.PreferencesGroup(title="Results")
         page.add(self.summary)
@@ -446,6 +568,17 @@ class ValidatorWindow(Adw.ApplicationWindow):
             subtitle="Start with the passive audit.",
         )
         self.summary.add(self.placeholder)
+
+        self.evidence_integrity = Adw.PreferencesGroup(title="Evidence integrity")
+        self.evidence_integrity.set_visible(False)
+        page.add(self.evidence_integrity)
+        self.evidence_integrity_rows: list[Adw.PreferencesRow] = []
+
+        self.execution_plan = Adw.PreferencesGroup(title="Next validation actions")
+        self.execution_plan.set_visible(False)
+        page.add(self.execution_plan)
+        self.execution_plan_rows: list[Adw.ActionRow] = []
+        self.execution_plan_buttons: list[Gtk.Button] = []
 
         self.acceptance = Adw.PreferencesGroup(title="Component acceptance")
         self.acceptance.set_visible(False)
@@ -488,6 +621,40 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.pending_run_button = button
         callback(button)
 
+    def on_validation_search_changed(self, entry: Gtk.SearchEntry) -> None:
+        self.apply_validation_filter(entry.get_text())
+
+    def on_validation_search_stopped(self, entry: Gtk.SearchEntry) -> None:
+        entry.set_text("")
+
+    def apply_validation_filter(self, query: str | None = None) -> None:
+        query = self.validation_search.get_text() if query is None else query
+        active_buttons = {button for _name, button in self.active_subtests}
+        if self.current_run_button is not None:
+            active_buttons.add(self.current_run_button)
+
+        visible_groups = 0
+        for group, section_text, rows in self.validation_groups:
+            section_matches = validation_search_matches(query, section_text)
+            any_row_visible = False
+            for row, row_text, button in rows:
+                row_visible = section_matches or validation_search_matches(query, row_text)
+                row_visible = row_visible or button in active_buttons
+                row.set_visible(row_visible)
+                any_row_visible = any_row_visible or row_visible
+
+            category_is_active = any(
+                self.validation_button_groups.get(button) is group for button in active_buttons
+            )
+            group_visible = any_row_visible or category_is_active
+            group.set_visible(group_visible)
+            visible_groups += int(group_visible)
+
+        no_matches = bool(query.strip()) and visible_groups == 0
+        if no_matches:
+            self.no_search_results_row.set_title(f"No tests match ‘{query.strip()}’")
+        self.no_search_results.set_visible(no_matches)
+
     def confirm(self, heading: str, body: str, callback) -> None:
         dialog = Adw.MessageDialog.new(self, heading, body)
         dialog.add_response("cancel", "Cancel")
@@ -507,14 +674,14 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_automated(self, _button) -> None:
         self.confirm(
             "Run the automated hardware suite?",
-            "The suite runs passive, platform, display, sensor, power, USB, LTE, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Guided headset and suspend tests are not included. Administrator authorization is required.",
+            "The suite runs passive, platform, bounded internal-storage I/O, display, sensor, power, USB, LTE, GNSS, camera, input, storage, wireless, light, haptic, and audible audio tests. Each state-changing test restores its original state. Guided headset and suspend tests are not included. Administrator authorization is required.",
             lambda: self.run_command("automated", ["--yes"]),
         )
 
     def on_quiet(self, _button) -> None:
         self.confirm(
             "Run quiet hardware diagnostics?",
-            "This suite validates platform, display, sensors, power, USB, LTE, GNSS, cameras, input capabilities, storage, Wi-Fi, Bluetooth and lights. It does not play or record audio, vibrate haptics, suspend the tablet, or request guided actions. Every state-changing check restores its original state.",
+            "This suite validates platform, bounded internal-storage I/O, display, sensors, power, USB, LTE, GNSS, cameras, input capabilities, storage, Wi-Fi, Bluetooth and lights. It does not play or record audio, vibrate haptics, suspend the tablet, or request guided actions. Every state-changing check restores its original state.",
             lambda: self.run_command("quiet", ["--yes"]),
         )
 
@@ -535,14 +702,14 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_audio(self, _button) -> None:
         self.confirm(
             "Run active audio test?",
-            "Desktop audio is paused temporarily. The test plays a quiet one-second tone, records three seconds from Mic1, then restores the previous ALSA and PipeWire state. Administrator authorization is required.",
+            "Desktop audio is paused temporarily. The test plays a quiet one-second tone, records three seconds from Mic1, checks both channels for signal, clipping, DC offset and imbalance, then restores the previous ALSA and PipeWire state. Listening quality and intelligibility remain separate physical observations. Administrator authorization is required.",
             lambda: self.run_command("audio", ["--yes"]),
         )
 
     def on_headset(self, _button) -> None:
         self.confirm(
             "Test a connected wired headset?",
-            "Connect a four-pole headset first. The validator keeps speakers muted, plays one quiet one-second tone through the headphones, records three seconds from the headset microphone, then asks you to unplug, reinsert and press one headset button. It restores the original ALSA and desktop-audio state.",
+            "Connect a four-pole headset first. The validator keeps speakers muted, plays one quiet one-second tone through the headphones, analyzes both captured microphone channels for signal, clipping, DC offset and imbalance, then asks you to unplug, reinsert and press one headset button. Listening quality and intelligibility remain physical observations. It restores the original ALSA and desktop-audio state.",
             lambda: self.run_command("headset", ["--yes", "--timeout", "90"]),
         )
 
@@ -556,7 +723,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_camera(self, _button) -> None:
         self.confirm(
             "Test both cameras?",
-            "The validator briefly switches the AtomISP route, checks three in-memory frames per camera, moves rear focus by one position, discards the frames, and restores the original focus and route. Images are never saved or logged.",
+            "The validator briefly switches the AtomISP route, discards two warm-up buffers, checks five in-memory Bayer frames per camera for freeze, clipping, corruption, spatial structure and temporal coherence, moves rear focus by one position, and restores the original focus and route. Images are never saved or logged.",
             lambda: self.run_command("camera", ["--yes"]),
         )
 
@@ -584,12 +751,22 @@ class ValidatorWindow(Adw.ApplicationWindow):
             lambda: self.run_command("storage-write", ["--yes"]),
         )
 
+    def on_internal_storage(self, _button) -> None:
+        self.confirm(
+            "Write-test internal storage?",
+            "The validator creates one private 4 MiB non-zero file on the internal root filesystem, fsyncs and read-verifies it, removes it, then synchronizes the containing directory. It refuses a target on another mount and reports any residual probe file. Administrator authorization is required.",
+            lambda: self.run_command("internal-storage", ["--yes"]),
+        )
+
     def on_inputs(self, _button) -> None:
         self.confirm(
             "Inspect input capabilities?",
             "The validator opens each kernel input node read-only to inspect its capability map. It does not grab devices, monitor events, record keys or touches, or inject input. Administrator authorization is required.",
             lambda: self.run_command("inputs", ["--yes"]),
         )
+
+    def on_pen_stack(self, _button) -> None:
+        self.run_command("pen-stack", [])
 
     def on_controls(self, _button) -> None:
         self.confirm(
@@ -612,6 +789,20 @@ class ValidatorWindow(Adw.ApplicationWindow):
             lambda: self.run_command("rotation", ["--yes"]),
         )
 
+    def on_pen_mapping(self, _button) -> None:
+        self.confirm(
+            "Test pen mapping in every orientation?",
+            "Start in Halo keyboard mode. Switch to pen mode when asked, then use only the Wacom pen to hit four targets in upright landscape, both portraits, inverted landscape and returned upright. Finger and mouse input are ignored; raw pen coordinates are never stored. Return to Halo keyboard mode when asked. Administrator authorization is required.",
+            lambda: self.run_command("pen-mapping", ["--yes", "--timeout", "240"]),
+        )
+
+    def on_sensor_interactions(self, _button) -> None:
+        self.confirm(
+            "Test physical sensor responses?",
+            "Follow the full-screen prompts to shade and expose both ambient-light sensors, move a hand near and away from the Halo surface, then open or fold the hinge. The test reads IIO channels only, stores aggregate ranges rather than raw samples, and changes no sensor or desktop policy. Administrator authorization is required.",
+            lambda: self.run_command("sensor-interactions", ["--yes", "--timeout", "120"]),
+        )
+
     def on_lights(self, _button) -> None:
         self.confirm(
             "Test panel and platform lights?",
@@ -625,8 +816,22 @@ class ValidatorWindow(Adw.ApplicationWindow):
     def on_power(self, _button) -> None:
         self.run_command("power", [])
 
+    def on_charging(self, _button) -> None:
+        self.confirm(
+            "Observe charging for 30 seconds?",
+            "This read-only check samples charger continuity, fuel-gauge progression and battery temperatures. Leave the cable state unchanged during the observation.",
+            lambda: self.run_command("charging", ["--seconds", "30"]),
+        )
+
     def on_platform(self, _button) -> None:
         self.run_command("platform", [])
+
+    def on_apt(self, _button) -> None:
+        self.confirm(
+            "Check configured software sources?",
+            "The validator contacts every configured APT repository for signed release metadata using disposable list and cache directories. It downloads no package indexes and does not modify the system APT cache.",
+            lambda: self.run_command("apt", []),
+        )
 
     def on_resources(self, _button) -> None:
         self.run_command("resources", [])
@@ -655,8 +860,22 @@ class ValidatorWindow(Adw.ApplicationWindow):
             lambda: self.run_command("modem", []),
         )
 
+    def on_gnss(self, _button) -> None:
+        self.confirm(
+            "Validate GNSS outdoors?",
+            "This check requires the legally imported BCM4752 runtime and a clear view of the sky. It validates the transport, gpsd reports, satellite data and a real position fix without retaining location history.",
+            lambda: self.run_command("gnss", ["--require-fix"]),
+        )
+
     def on_usb(self, _button) -> None:
         self.run_command("usb", [])
+
+    def on_usb_cycle(self, _button) -> None:
+        self.confirm(
+            "Test a USB OTG accessory?",
+            "Start with no OTG accessory connected. The validator will ask you to disconnect any cable, insert exactly one accessory, then remove it and restore the original cable state. It verifies host role, enumeration and a bounded descriptor transfer without retaining device identity. Stop still requires the original cable state to be restored.",
+            lambda: self.run_command("usb-cycle", ["--yes", "--timeout", "90"]),
+        )
 
     def run_command(
         self,
@@ -694,6 +913,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             self.current_run_button.remove_css_class("suggested-action")
             self.current_run_button.add_css_class("destructive-action")
             self.current_run_button.set_sensitive(True)
+        self.apply_validation_filter()
         self.console_buffer.set_text(f"$ {shlex.join(argv)}\n\n")
         self.console_buffer.move_mark(self.console_end, self.console_buffer.get_end_iter())
         self.run_streaming_command(argv, output)
@@ -799,6 +1019,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
         self.active_subtests = [entry for entry in self.active_subtests if entry[0] != name]
         self.active_subtests.append((name, button))
         self.set_row_running(button)
+        self.apply_validation_filter()
 
     def set_subtest_result(self, name: str, status: str) -> None:
         matches = [index for index, entry in enumerate(self.active_subtests) if entry[0] == name]
@@ -830,6 +1051,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             self.set_row_result(button, 0 if status == "PASS" else 1, False)
         if was_active and self.active_subtests:
             self.set_row_running(self.active_subtests[-1][1])
+        self.apply_validation_filter()
 
     def create_action_button(self, icon_name: str, icon_size: int) -> Gtk.Button:
         icon = Gtk.Image.new_from_icon_name(icon_name)
@@ -906,6 +1128,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 self.current_run_button.add_css_class("suggested-action")
         self.current_process = None
         self.current_run_button = None
+        self.apply_validation_filter()
         self.cancel_file = None
         self.cancel_requested = False
         self.set_run_buttons_sensitive(True)
@@ -929,6 +1152,24 @@ class ValidatorWindow(Adw.ApplicationWindow):
         for row in self.result_rows:
             self.summary.remove(row)
         self.result_rows.clear()
+        for row in self.evidence_integrity_rows:
+            self.evidence_integrity.remove(row)
+        self.evidence_integrity_rows.clear()
+        self.evidence_integrity.set_description("")
+        self.evidence_integrity.set_visible(False)
+        for button in self.execution_plan_buttons:
+            if button in self.run_buttons:
+                self.run_buttons.remove(button)
+            self.row_spinners.pop(button, None)
+            self.row_status_icons.pop(button, None)
+            self.run_button_icons.pop(button, None)
+            self.run_button_tooltips.pop(button, None)
+        self.execution_plan_buttons.clear()
+        for row in self.execution_plan_rows:
+            self.execution_plan.remove(row)
+        self.execution_plan_rows.clear()
+        self.execution_plan.set_description("")
+        self.execution_plan.set_visible(False)
         for row in self.acceptance_rows:
             self.acceptance.remove(row)
         self.acceptance_rows.clear()
@@ -947,6 +1188,7 @@ class ValidatorWindow(Adw.ApplicationWindow):
             result = summary["result"]
             acceptance = model.get("acceptance")
             readiness = acceptance.get("summary", {}) if acceptance else {}
+            integrity = model.get("integrity", {})
             accepted = readiness.get("components_complete", 0)
             component_total = readiness.get("components_total", 0)
             title = (
@@ -956,6 +1198,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
             )
             if result == "PASS" and acceptance and accepted < component_total:
                 title = "Diagnostics passed · acceptance incomplete"
+            if integrity.get("status") == "FAIL":
+                title = "Evidence integrity failed"
             self.overview_row.set_title(title)
             subtitle = (
                 f"{counts['PASS']} passed · {counts['FAIL']} failed · {counts['WARN']} warnings · "
@@ -963,8 +1207,148 @@ class ValidatorWindow(Adw.ApplicationWindow):
             )
             if acceptance:
                 subtitle += f" · {accepted}/{component_total} components accepted"
+            if integrity:
+                subtitle += f" · integrity {integrity.get('status', 'unknown')}"
             self.overview_row.set_subtitle(subtitle)
+            if integrity:
+                inventory = model.get("package_inventory", {})
+                integrity_status = integrity.get("status", "unknown")
+                self.evidence_integrity.set_description(
+                    "Only complete, untampered evidence can satisfy device acceptance."
+                )
+                self.evidence_integrity.set_visible(True)
+                gate = Adw.ActionRow(
+                    title="Evidence gate",
+                    subtitle=(
+                        f"State preservation {integrity.get('state_preservation', 'unknown')} · "
+                        f"run finished {'yes' if integrity.get('run_finished') else 'no'} · "
+                        f"package inventory {'complete' if integrity.get('package_inventory_complete') else 'incomplete'}"
+                    ),
+                )
+                gate_badge = Gtk.Label(label=integrity_status)
+                gate_badge.add_css_class("status-badge")
+                gate_badge.add_css_class(f"status-{integrity_status.lower()}")
+                gate.add_suffix(gate_badge)
+                self.evidence_integrity.add(gate)
+                self.evidence_integrity_rows.append(gate)
+                for problem in integrity.get("problems", []):
+                    problem_row = Adw.ActionRow(title=problem, subtitle="This problem invalidates acceptance evidence.")
+                    problem_badge = Gtk.Label(label="FAIL")
+                    problem_badge.add_css_class("status-badge")
+                    problem_badge.add_css_class("status-fail")
+                    problem_row.add_suffix(problem_badge)
+                    self.evidence_integrity.add(problem_row)
+                    self.evidence_integrity_rows.append(problem_row)
+                if inventory and not inventory.get("complete", False):
+                    inventory_details = []
+                    if inventory.get("missing"):
+                        inventory_details.append(f"Missing: {', '.join(inventory['missing'])}")
+                    if inventory.get("unexpected"):
+                        inventory_details.append(f"Unexpected: {', '.join(inventory['unexpected'])}")
+                    inventory_details.extend(inventory.get("problems", []))
+                    inventory_row = Adw.ActionRow(
+                        title="Validated package inventory is incomplete",
+                        subtitle=" · ".join(inventory_details) or "The captured package identities are inconsistent.",
+                    )
+                    inventory_badge = Gtk.Label(label=f"{inventory.get('captured', 0)}/{inventory.get('expected', 0)}")
+                    inventory_badge.add_css_class("status-badge")
+                    inventory_badge.add_css_class("status-fail")
+                    inventory_row.add_suffix(inventory_badge)
+                    self.evidence_integrity.add(inventory_row)
+                    self.evidence_integrity_rows.append(inventory_row)
             if acceptance:
+                execution_plan = acceptance.get("execution_plan", {})
+                if execution_plan.get("schema") == "org.yogabook.validator.execution-plan/v1":
+                    actions = execution_plan.get("actions", [])
+                    plan_scope = (
+                        "Evidence integrity blocks every component-specific action until a trusted "
+                        "new capture succeeds. "
+                        if execution_plan.get("integrity_blocking") or integrity.get("status") != "PASS"
+                        else (
+                            f"{len(actions)} deduplicated action(s) cover "
+                            f"{execution_plan.get('components_affected', 0)} incomplete component(s). "
+                        )
+                    )
+                    self.execution_plan.set_description(
+                        plan_scope
+                        + "Play icons use local trusted UI actions; command text remains informational."
+                    )
+                    self.execution_plan.set_visible(True)
+                    if not actions:
+                        complete_row = Adw.ActionRow(
+                            title="No further validation action is required",
+                            subtitle="All acceptance selectors have passing evidence.",
+                        )
+                        complete_badge = Gtk.Label(label="PASS")
+                        complete_badge.add_css_class("status-badge")
+                        complete_badge.add_css_class("status-pass")
+                        complete_row.add_suffix(complete_badge)
+                        self.execution_plan.add(complete_row)
+                        self.execution_plan_rows.append(complete_row)
+                    for index, action in enumerate(actions, start=1):
+                        prerequisites = " ".join(action.get("prerequisites", []))
+                        details = [
+                            f"{action.get('interaction_class', 'unknown').title()} · "
+                            f"affects {action.get('components_affected', 0)} component(s)",
+                            f"$ {action.get('command', '')}",
+                            action.get("safety_note", ""),
+                        ]
+                        if prerequisites:
+                            details.append(f"Prerequisites: {prerequisites}")
+                        action_row = Adw.ActionRow(
+                            title=f"{index}. {action.get('title', action.get('id', 'Validation action'))}",
+                            subtitle="\n".join(item for item in details if item),
+                        )
+                        action_badge = Gtk.Label(label=action.get("status", "UNKNOWN"))
+                        action_badge.add_css_class("status-badge")
+                        action_badge.add_css_class(
+                            f"status-{action.get('status', 'unknown').lower().replace('_', '-')}"
+                        )
+                        action_id = action.get("id")
+                        handler_name = EXECUTION_ACTION_HANDLERS.get(action_id)
+                        if integrity.get("status") != "PASS" and action_id != "recapture-evidence":
+                            handler_name = None
+                        action_suffix = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                        action_suffix.set_valign(Gtk.Align.CENTER)
+                        action_suffix.append(action_badge)
+                        if handler_name is not None:
+                            callback = getattr(self, handler_name)
+                            action_button = self.create_action_button(
+                                "media-playback-start-symbolic", 18
+                            )
+                            action_button.add_css_class("flat")
+                            action_button.set_size_request(36, 36)
+                            action_button.set_halign(Gtk.Align.START)
+                            action_button.set_valign(Gtk.Align.CENTER)
+                            tooltip = f"Run {action.get('title', action_id)}"
+                            self.set_action_button_state(
+                                action_button,
+                                "media-playback-start-symbolic",
+                                tooltip,
+                            )
+                            action_button.connect(
+                                "clicked", self.on_run_button_clicked, callback
+                            )
+                            spinner = Gtk.Spinner()
+                            spinner.set_visible(False)
+                            status_icon = Gtk.Image()
+                            status_icon.set_pixel_size(20)
+                            status_icon.set_visible(False)
+                            self.run_buttons.append(action_button)
+                            self.execution_plan_buttons.append(action_button)
+                            self.row_spinners[action_button] = spinner
+                            self.row_status_icons[action_button] = status_icon
+                            self.run_button_tooltips[action_button] = tooltip
+                            action_state = Gtk.Overlay()
+                            action_state.set_size_request(24, 24)
+                            action_state.set_child(spinner)
+                            action_state.add_overlay(status_icon)
+                            action_suffix.append(action_state)
+                            action_suffix.append(action_button)
+                        action_row.add_suffix(action_suffix)
+                        self.execution_plan.add(action_row)
+                        self.execution_plan_rows.append(action_row)
+
                 layer_readiness = readiness.get("layers", {})
                 if all(layer in layer_readiness for layer in ("structural", "functional", "physical")):
                     self.acceptance.set_description(
@@ -977,7 +1361,8 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 self.acceptance.set_visible(True)
                 for component in acceptance.get("components", []):
                     layers = component["layers"]
-                    row = Adw.ActionRow(
+                    row_type = Adw.ActionRow if component["status"] == "PASS" else Adw.ExpanderRow
+                    row = row_type(
                         title=component["name"],
                         subtitle=(
                             f"Structural {layers['structural']['status']} · "
@@ -988,7 +1373,32 @@ class ValidatorWindow(Adw.ApplicationWindow):
                     badge = Gtk.Label(label=component["status"])
                     badge.add_css_class("status-badge")
                     badge.add_css_class(f"status-{component['status'].lower().replace('_', '-')}")
-                    row.add_suffix(badge)
+                    if isinstance(row, Adw.ExpanderRow):
+                        row.add_action(badge)
+                        for blocker in component.get("root_blockers", component.get("blockers", [])):
+                            blocked_selectors = blocker.get("blocked_selectors", [])
+                            dependency_note = (
+                                f" Blocks {len(blocked_selectors)} dependent check(s): "
+                                f"{', '.join(blocked_selectors)}."
+                                if blocked_selectors else ""
+                            )
+                            blocker_row = Adw.ActionRow(
+                                title=f"{blocker['layer'].title()} · {blocker['selector']}",
+                                subtitle=(
+                                    f"{blocker.get('reason', '')} "
+                                    f"{dependency_note} "
+                                    f"Next: {blocker.get('recommended_action', '')}"
+                                ).strip(),
+                            )
+                            blocker_badge = Gtk.Label(label=blocker["status"])
+                            blocker_badge.add_css_class("status-badge")
+                            blocker_badge.add_css_class(
+                                f"status-{blocker['status'].lower().replace('_', '-')}"
+                            )
+                            blocker_row.add_suffix(blocker_badge)
+                            row.add_row(blocker_row)
+                    else:
+                        row.add_suffix(badge)
                     self.acceptance.add(row)
                     self.acceptance_rows.append(row)
         else:
@@ -1000,17 +1410,32 @@ class ValidatorWindow(Adw.ApplicationWindow):
                 f"{counts['PASS']} passed · {counts['FAIL']} failed · {counts['WARN']} warnings · {counts['SKIP']} skipped"
             )
         severity = {"FAIL": 0, "WARN": 1, "PASS": 2, "SKIP": 3, "INFO": 4}
+        findings = {
+            finding["id"]: finding
+            for finding in model.get("findings", [])
+        } if model_path.is_file() else {}
         rows.sort(key=lambda row: (severity.get(row["status"], 5), row["subsystem"], row["check_id"]))
         for result in rows:
             status = result["status"]
-            row = Adw.ActionRow(
+            finding = findings.get(f'{result["subsystem"]}/{result["check_id"]}')
+            row_type = Adw.ExpanderRow if finding else Adw.ActionRow
+            row = row_type(
                 title=result["summary"],
                 subtitle=f'{result["subsystem"]} · {result["check_id"]}' + (f' — {result["details"]}' if result["details"] else ""),
             )
             badge = Gtk.Label(label=status)
             badge.add_css_class("status-badge")
             badge.add_css_class(f"status-{status.lower()}")
-            row.add_suffix(badge)
+            if isinstance(row, Adw.ExpanderRow) and finding:
+                row.add_action(badge)
+                row.add_row(
+                    Adw.ActionRow(
+                        title="Recommended next step",
+                        subtitle=finding["recommended_action"],
+                    )
+                )
+            else:
+                row.add_suffix(badge)
             self.summary.add(row)
             self.result_rows.append(row)
 
@@ -1075,7 +1500,8 @@ class PhysicalWindow(Adw.Window):
         self.parent_window = parent
         self.command = command
         self.set_default_size(760, 700)
-        self.rows: list[tuple[str, Gtk.DropDown, Gtk.Entry]] = []
+        self.rows: list[tuple[str, Gtk.DropDown, Gtk.Entry, Gtk.CheckButton]] = []
+        self.imported_observed_at: dict[str, str] = {}
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -1083,9 +1509,16 @@ class PhysicalWindow(Adw.Window):
         save.add_css_class("suggested-action")
         save.connect("clicked", self.on_save)
         header.pack_end(save)
+        load = Gtk.Button(label="Load observations")
+        load.set_tooltip_text("Load internally consistent reference values from this release and runtime")
+        load.connect("clicked", self.on_load)
+        header.pack_start(load)
         toolbar.add_top_bar(header)
         page = Adw.PreferencesPage()
-        description = "Choose Skip for unavailable accessories or conditions, such as LTE without a SIM."
+        description = (
+            "Choose an explicit result for every item. Fail and Not applicable require a reason; "
+            "nothing is silently recorded as skipped."
+        )
         if command == "full":
             description = "Record the observations to include after deep passive diagnostics. " + description
         page.set_description(description)
@@ -1095,26 +1528,181 @@ class PhysicalWindow(Adw.Window):
             page.add(group)
             for check_id in check_ids:
                 row = Adw.ActionRow(title=labels[check_id])
-                dropdown = Gtk.DropDown.new_from_strings(["Skip", "Pass", "Fail"])
+                dropdown = Gtk.DropDown.new_from_strings(
+                    ["Choose result", "Pass", "Fail", "Not applicable"]
+                )
                 dropdown.set_selected(0)
-                note = Gtk.Entry(placeholder_text="Optional note")
+                note = Gtk.Entry(placeholder_text="Optional context for a passing observation")
                 note.set_width_chars(18)
+                confirmation = Gtk.CheckButton()
+                confirmation.set_tooltip_text("Confirm this observation for the current session")
+                confirmation.update_property(
+                    [Gtk.AccessibleProperty.LABEL],
+                    ["Confirmed for the current session"],
+                )
+                dropdown.connect("notify::selected", self.on_status_changed, note, confirmation)
                 row.add_suffix(dropdown)
                 row.add_suffix(note)
+                row.add_suffix(confirmation)
                 group.add(row)
-                self.rows.append((check_id, dropdown, note))
+                self.rows.append((check_id, dropdown, note, confirmation))
         toolbar.set_content(page)
         self.set_content(toolbar)
 
+    def on_status_changed(
+        self,
+        dropdown: Gtk.DropDown,
+        _property,
+        note: Gtk.Entry,
+        confirmation: Gtk.CheckButton,
+    ) -> None:
+        confirmation.set_active(dropdown.get_selected() != 0)
+        if dropdown.get_selected() in (2, 3):
+            note.set_placeholder_text("Required reason or observation context")
+        else:
+            note.set_placeholder_text("Optional context for a passing observation")
+
+    def on_load(self, _button) -> None:
+        chooser = Gtk.FileChooserNative.new(
+            "Load verified physical observations",
+            self,
+            Gtk.FileChooserAction.SELECT_FOLDER,
+            "Load observations",
+            "Cancel",
+        )
+        chooser.set_current_folder(Gio.File.new_for_path(str(results_root())))
+        chooser.connect("response", self.on_load_response)
+        self.load_chooser = chooser
+        chooser.show()
+
+    def on_load_response(self, chooser: Gtk.FileChooserNative, response: int) -> None:
+        report_directory = None
+        if response == Gtk.ResponseType.ACCEPT:
+            selected = chooser.get_file()
+            report_directory = Path(selected.get_path()) if selected and selected.get_path() else None
+        chooser.hide()
+        self.load_chooser = None
+        if response != Gtk.ResponseType.ACCEPT:
+            return
+        if report_directory is None:
+            self.finish_observation_load(None, "No report folder was selected.")
+            return
+        threading.Thread(
+            target=self.load_observations_worker,
+            args=(report_directory,),
+            daemon=True,
+        ).start()
+
+    def load_observations_worker(self, report_directory: Path) -> None:
+        try:
+            version_result = subprocess.run(
+                [str(CLI), "version"],
+                text=True,
+                capture_output=True,
+                timeout=5,
+            )
+            version_match = re.search(r"(\d+\.\d+\.\d+)", version_result.stdout)
+            if version_result.returncode != 0 or version_match is None:
+                raise ValueError("The installed Validator version could not be determined.")
+            device = Path("/sys/class/dmi/id/product_name").read_text(encoding="utf-8").strip()
+            command = [
+                sys.executable,
+                str(PHYSICAL_IMPORT),
+                str(report_directory),
+                "--validator-version",
+                version_match.group(1),
+                "--device",
+                device,
+                "--matrix",
+                str(ACCEPTANCE_MATRIX),
+            ]
+            for check_id, _label in PHYSICAL_CHECKS:
+                command.extend(["--check-id", check_id])
+            completed = subprocess.run(command, text=True, capture_output=True, timeout=15)
+            if completed.returncode != 0:
+                message = completed.stderr.strip().splitlines()[-1] if completed.stderr.strip() else "Import failed."
+                raise ValueError(message.removeprefix("yogabook-validator-physical-import.py: error: "))
+            imported = {
+                item["check_id"]: item
+                for item in json.loads(completed.stdout)
+            }
+            GLib.idle_add(self.finish_observation_load, imported, "")
+        except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+            GLib.idle_add(self.finish_observation_load, None, str(exc))
+
+    def finish_observation_load(
+        self,
+        imported: dict[str, dict[str, str]] | None,
+        error: str,
+    ) -> bool:
+        if imported is not None:
+            selected_index = {"PASS": 1, "FAIL": 2, "SKIP": 3}
+            for check_id, dropdown, note, confirmation in self.rows:
+                item = imported[check_id]
+                dropdown.set_selected(selected_index[item["status"]])
+                note.set_text(item["note"])
+                confirmation.set_active(False)
+                self.imported_observed_at[check_id] = item["observed_at"]
+            dialog = Adw.MessageDialog.new(
+                self,
+                "Reference observations loaded",
+                "The source is internally consistent and matches this model, Validator release, acceptance matrix and installed package inventory. Reconfirm every observation for the current session before saving.",
+            )
+            dialog.add_response("close", "Review observations")
+            dialog.present()
+        else:
+            dialog = Adw.MessageDialog.new(
+                self,
+                "Observations could not be loaded",
+                error,
+            )
+            dialog.add_response("close", "Close")
+            dialog.present()
+        return GLib.SOURCE_REMOVE
+
     def on_save(self, _button) -> None:
+        missing_results = []
+        missing_context = []
+        unconfirmed = []
+        labels = dict(PHYSICAL_CHECKS)
+        for check_id, dropdown, note, confirmation in self.rows:
+            selected = dropdown.get_selected()
+            if selected == 0:
+                missing_results.append(labels[check_id])
+            elif selected in (2, 3) and not note.get_text().strip():
+                missing_context.append(labels[check_id])
+            elif not confirmation.get_active():
+                unconfirmed.append(labels[check_id])
+        if missing_results or missing_context or unconfirmed:
+            details = []
+            if missing_results:
+                details.append(f"Choose a result for {len(missing_results)} item(s).")
+            if missing_context:
+                details.append(f"Add a reason for {len(missing_context)} failed or unavailable item(s).")
+            if unconfirmed:
+                details.append(f"Reconfirm {len(unconfirmed)} imported observation(s) for this session.")
+            dialog = Adw.MessageDialog.new(
+                self,
+                "Physical observations are incomplete",
+                " ".join(details) + " No result has been saved.",
+            )
+            dialog.add_response("close", "Review observations")
+            dialog.present()
+            return
         cache = Path(GLib.get_user_cache_dir()) / "yogabook-validator"
-        cache.mkdir(parents=True, exist_ok=True)
-        answers = cache / f"{self.command}-{os.getpid()}.tsv"
-        values = ["SKIP", "PASS", "FAIL"]
-        with answers.open("w", encoding="utf-8", newline="") as stream:
-            for check_id, dropdown, note in self.rows:
-                clean_note = note.get_text().replace("\t", " ").replace("\n", " ")
-                stream.write(f"{check_id}\t{values[dropdown.get_selected()]}\t{clean_note}\n")
+        cache.mkdir(mode=0o700, parents=True, exist_ok=True)
+        cache.chmod(0o700)
+        descriptor, answer_name = tempfile.mkstemp(prefix=f"{self.command}-", suffix=".tsv", dir=cache)
+        answers = Path(answer_name)
+        values = [None, "PASS", "FAIL", "SKIP"]
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+            for check_id, dropdown, note, _confirmation in self.rows:
+                clean_note = note.get_text().strip().replace("\t", " ").replace("\n", " ")
+                status = values[dropdown.get_selected()]
+                if status is None:
+                    raise RuntimeError("physical observation validation was bypassed")
+                observed_at = self.imported_observed_at.get(check_id, "")
+                stream.write(f"{check_id}\t{status}\t{clean_note}\t{observed_at}\n")
         output = self.parent_window.report_path(self.command)
         self.close()
         self.parent_window.run_command(
@@ -1137,7 +1725,7 @@ class ValidatorApplication(Adw.Application):
             .status-pass { background: alpha(@success_color, .18); color: @success_color; }
             .status-fail { background: alpha(@error_color, .18); color: @error_color; }
             .status-warn { background: alpha(@warning_color, .18); color: @warning_color; }
-            .status-skip, .status-info, .status-unimplemented, .status-incomplete, .status-not-run { background: alpha(currentColor, .10); }
+            .status-skip, .status-info, .status-stale, .status-unimplemented, .status-incomplete, .status-not-run { background: alpha(currentColor, .10); }
         """)
         display = Gdk.Display.get_default()
         if display:

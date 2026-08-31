@@ -79,19 +79,18 @@ audio-media)
 	run_subtest camera "$LIBEXEC_DIR/yogabook-validator-camera.sh" --yes
 	run_subtest lights "$LIBEXEC_DIR/yogabook-validator-active.sh" lights --yes
 	run_subtest audio "$LIBEXEC_DIR/yogabook-validator-active.sh" audio --yes
-	run_subtest headset "$LIBEXEC_DIR/yogabook-validator-active.sh" headset --yes --timeout 90
 	;;
 input-modes)
 	run_subtest inputs "$LIBEXEC_DIR/yogabook-validator-active.sh" inputs --yes
-	run_subtest controls "$LIBEXEC_DIR/yogabook-validator-active.sh" controls --yes --timeout 90
 	run_subtest haptics "$LIBEXEC_DIR/yogabook-validator-active.sh" haptics --yes
-	run_subtest modes "$LIBEXEC_DIR/yogabook-validator-active.sh" modes --yes
-	run_subtest rotation "$LIBEXEC_DIR/yogabook-validator-active.sh" rotation --yes
+	run_subtest pen-stack run_as_desktop "$LIBEXEC_DIR/yogabook-validator-pen-stack.sh"
 	;;
 platform-power)
-	run_subtest platform run_as_desktop "$LIBEXEC_DIR/yogabook-validator-platform.sh"
+	run_subtest apt run_as_desktop "$LIBEXEC_DIR/yogabook-validator-apt.sh"
+	run_subtest platform "$LIBEXEC_DIR/yogabook-validator-platform.sh"
 	run_subtest resources run_as_desktop "$LIBEXEC_DIR/yogabook-validator-resources.sh"
 	run_subtest power run_as_desktop "$LIBEXEC_DIR/yogabook-validator-power.sh"
+	run_subtest charging run_as_desktop "$LIBEXEC_DIR/yogabook-validator-charging.sh"
 	run_subtest sensors run_as_desktop "$LIBEXEC_DIR/yogabook-validator-sensors.sh"
 	;;
 connectivity-storage)
@@ -100,6 +99,7 @@ connectivity-storage)
 	run_subtest wireless "$LIBEXEC_DIR/yogabook-validator-active.sh" wireless --yes
 	run_subtest storage "$LIBEXEC_DIR/yogabook-validator-active.sh" storage --yes
 	run_subtest storage-write "$LIBEXEC_DIR/yogabook-validator-active.sh" storage-write --yes
+	run_subtest internal-storage "$LIBEXEC_DIR/yogabook-validator-active.sh" internal-storage --yes
 	;;
 reliability)
 	run_subtest suspend "$LIBEXEC_DIR/yogabook-validator-active.sh" suspend --yes --seconds 8

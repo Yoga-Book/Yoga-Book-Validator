@@ -53,7 +53,7 @@ Build on Debian or Ubuntu:
 sudo apt install debhelper devscripts shellcheck python3
 make test
 make deb
-sudo apt install ../yogabook-validator_0.45.0_all.deb
+sudo apt install ../yogabook-validator_0.75.2_all.deb
 ```
 
 Open **Yoga Book Validator** from the application menu, or run:
@@ -68,23 +68,29 @@ yogabook-validator category input-modes
 yogabook-validator category platform-power
 yogabook-validator category connectivity-storage
 yogabook-validator category reliability
+yogabook-validator apt
 yogabook-validator audio
 yogabook-validator camera
+yogabook-validator charging
 yogabook-validator display
 yogabook-validator dossier REPORT_DIRECTORY... --output DOSSIER_DIRECTORY
 yogabook-validator haptics
 yogabook-validator headset
 yogabook-validator inputs
+yogabook-validator internal-storage
 yogabook-validator controls
 yogabook-validator lights
 yogabook-validator modem
 yogabook-validator modes
+yogabook-validator pen-stack
 yogabook-validator rotation
+yogabook-validator pen-mapping
 yogabook-validator platform
 yogabook-validator power
 yogabook-validator quiet
 yogabook-validator resources
 yogabook-validator sensors
+yogabook-validator sensor-interactions --yes --timeout 120
 yogabook-validator stability start 3
 yogabook-validator stability check
 yogabook-validator stability status
@@ -92,6 +98,7 @@ yogabook-validator storage
 yogabook-validator storage-write
 yogabook-validator suspend 8
 yogabook-validator usb
+yogabook-validator usb-cycle --timeout 90
 yogabook-validator wireless
 yogabook-validator gnss
 yogabook-validator physical
@@ -103,11 +110,12 @@ suspend/resume cycle is appropriate.
 The UI and CLI save one evidence directory per run. `results.tsv` and
 `validator.log` remain the raw authoritative evidence. Every completed run also
 produces a versioned `report.json`, a readable `report.md`, a self-contained
-`report.html`, and a privacy-safe `environment.tsv`. The generated diagnostic
+`report.html`, a privacy-safe `environment.tsv`, and an exact
+`validated-packages.tsv` inventory suitable for ISO provenance. The generated diagnostic
 report separates individual checks from suite roll-ups, so a failed subsystem
 is not counted twice; it includes coverage, subsystem health, prioritized
 findings, suggested next actions, and SHA-256 hashes for the raw evidence.
-It also evaluates all 23 hardware components against the structural,
+It also evaluates all 24 hardware components against the structural,
 functional and physical layers in the coverage matrix. A component contributes
 to acceptance readiness only when every required selector is present and
 passes; missing runnable evidence is `NOT_RUN`, unavailable test coverage is
@@ -115,6 +123,28 @@ passes; missing runnable evidence is `NOT_RUN`, unavailable test coverage is
 readiness remains unchanged, while separate structural, functional and physical
 readiness metrics show exactly which evidence layer is complete without
 promoting a partially validated component.
+
+Each report also builds a deterministic execution plan from the root blockers.
+All 234 acceptance selectors map to an explicit automatic, guided, physical or
+external workflow. Repeated actions are collapsed across components, while the
+JSON, Markdown, HTML and UI retain the affected selectors, exact trusted CLI
+command, safety note and prerequisites. Commands embedded in a report are
+informational only; the UI never executes report-provided command text. For
+every known action ID, the UI exposes a play icon backed by a compiled local
+callback allowlist. Unknown or future report action IDs remain read-only.
+If evidence integrity fails, component advice is itself treated as untrusted:
+the plan is replaced by one acceptance-blocking recapture action bound to the
+local passive-audit callback. No selector workflow can be launched from that
+report until a new capture restores the integrity gate.
+
+Acceptance evidence is time-bounded rather than permanent. Passing charging,
+LTE and suspend/resume evidence remains current for 24 hours; USB OTG and SD
+transport evidence for seven days; stable physical observations for 30 days,
+with shorter seven-day overrides for volatile accessories and connectivity.
+An expired PASS is shown as `STALE` and must be refreshed, while an old FAIL or
+WARN remains visible until newer conclusive evidence supersedes it. Imported
+physical checklists retain their original observation time even after explicit
+reconfirmation, preventing an import from silently renewing acceptance.
 
 Use `yogabook-validator report DIRECTORY` to regenerate the derived formats
 from an older raw report. Active hardware tests and category suites ask for
@@ -131,7 +161,15 @@ without repeating their checks. The reliability category performs suspend/resume
 then starts, advances or confirms the persistent cold-boot workflow; when a
 physical cold boot is still required, it records SKIP instead of manufacturing
 a same-boot failure. Physical acceptance uses its single guided form because
-all checks require operator observation.
+all checks require operator observation. Every item must receive an explicit
+Pass, Fail or Not applicable result; Fail and Not applicable also require a
+reason, so unopened rows cannot silently become SKIP evidence. **Load
+observations** can resume a prior form only after verifying the report hashes,
+Validator release, Yoga Book model, acceptance-matrix digest and exact current
+package inventory. This is an internal-consistency check, not cryptographic
+attestation or a unique-device identity. Imported values are reference data:
+every row is marked unconfirmed and must be explicitly reconfirmed for the
+current session before a new timestamped report can be saved.
 
 Cold-boot stability tracking is read-only and never reboots or changes GRUB.
 `stability start 3` validates and records the current kernel, boot ID, SOF
@@ -172,24 +210,32 @@ and the codec DAC at 0 dB without ever raising a quieter existing value. If
 either cap cannot be read, applied and verified, playback is aborted. Transport
 matrix playback uses digital silence. Suspend validation also disables the
 physical speaker route while its direct stream crosses sleep, then restores
-the saved mixer state. Report bundles exclude WAV recordings
-and ALSA state snapshots because they may contain personal or machine-specific
-data.
+the saved mixer state. Raw monitor captures, WAV recordings and ALSA state
+snapshots are deleted after analysis or restoration. Report bundles accept only
+Validator report directories and archive an explicit allowlist of derived
+diagnostic evidence, excluding private or machine-specific audio state.
 
 The camera test requests administrator authorization because physical AtomISP
 nodes are intentionally private to the system image processor. It records the
-active processor and sensor state, pauses the processor, captures three frames
-from each sensor into bounded process memory, checks complete payloads,
-luminance variation and frame-to-frame change, then immediately discards the
-bytes. It also moves the WV517S rear focus actuator by one position and restores
+active processor and sensor state, pauses the processor, discards two warm-up
+buffers and analyzes five Bayer frames from each sensor in bounded process
+memory. It decodes the 10-bit green plane, rejects invalid upper bits, frozen
+active pixels, severe clipping and unstructured high-amplitude noise, and
+warns on ambiguous spatial or temporal signal before immediately discarding
+the bytes. It also moves the WV517S rear focus actuator by one position and restores
 the original position. It restores focus, the selected V4L2 input and the
 processor service on success, failure, interruption, or timeout and never
 stores or logs an image.
 
 The sensor test reads every raw ALS, accelerometer, hinge-angle and proximity
-channel and confirms that SensorProxy returns live desktop values. The lights
-test changes each brightness by only one step, then restores the panel and all
-LED brightness and trigger values even if the test is interrupted.
+channel and confirms that SensorProxy returns live desktop values. The guided
+`sensor-interactions` workflow additionally requires measurable response from
+both ALS devices, the SX9310 and both hinge devices. It enables each advance
+only after the sensor returns near its initial reading, retains aggregate
+channel ranges rather than raw samples, and verifies that desktop/Mutter and
+Halo-service state remain unchanged. The lights test changes each brightness
+by only one step, then restores the panel and all LED brightness and trigger
+values even if the test is interrupted.
 
 The input-capability test opens event nodes read-only and validates the key,
 switch, absolute-axis and force-feedback features exposed by the kernel. It
@@ -204,12 +250,32 @@ process also makes the kernel release all file-descriptor-owned grabs. The
 report keeps these functional events separate from the operator's physical
 assessment of the resulting controls.
 
+Every category runner is unattended: it never schedules a workflow that emits
+`ACTION_REQUIRED`. The optional guided physical section is deliberately outside
+those runners and contains headset insertion, hardware-button and lid events,
+Halo/pen mode switching, physical rotation, stimulated sensor responses, real
+stylus targets and USB OTG insertion. Missing guided evidence remains explicit
+physical or `NOT_RUN` coverage and never becomes a false automatic failure.
+
+`pen-stack` is the automatic replacement for physical stylus targets in
+unattended runs. It verifies the Wacom firmware identity and driver binding,
+mutually exclusive Halo/Wacom runtime state, libwacom display association,
+neutral calibration policy, required Mutter package, unlocked rotation policy,
+the current SensorProxy-to-Mutter transform and package integrity. It is
+read-only, does not change input mode and never injects synthetic pen events.
+Consequently it validates the software mapping stack but does not claim that a
+real pen tip contacted the panel; that end-to-end evidence remains optional and
+guided.
+
 The mode-cycle test starts in Halo keyboard mode and waits for the user to
 switch physically to drawing/pen mode and back. It verifies Wacom position,
-pressure, tool and touch capabilities, the libinput calibration matrix, Halo
+pressure, tool and touch capabilities, the neutral libinput calibration policy, Halo
 service recovery, display touchscreen presence, Mutter logical display state,
 GNOME orientation-lock and onscreen-keyboard settings, and transition-time
-kernel errors. Mode entry and return must remain stable for two seconds before
+kernel errors. It also proves that the `WCOM0019` device binds to I2C-HID with
+the Wacom driver in pen mode, remains present in every 100 ms trace sample, and
+returns to the expected unbound state in Halo keyboard mode. Mode entry and
+return must remain stable for two seconds before
 they are accepted. A 100 ms synchronized trace records SensorProxy orientation,
 Mutter transform, Halo service/devices and Wacom presence in
 `mode-transition.tsv`; it never reads keys, touches or pen strokes. Because this test
@@ -221,6 +287,29 @@ orientations and return it upright. Each SensorProxy orientation must remain
 stable with the corresponding Mutter transform before it is accepted. The
 test observes and reports desktop policy; it never applies a display transform.
 
+The rotated-pen mapping test verifies the `halo-keyboard` integration after
+Mutter has applied the current display transform. A full-screen GTK4/Wayland
+helper accepts pen-tip events authenticated by GTK's dedicated stylus tool and
+presents four
+targets in upright landscape, both portrait directions, inverted landscape and
+the final returned-upright state. SensorProxy and Mutter must agree and remain
+stable before each target becomes active. A session-only yellow crosshair follows
+the Wacom pen over the test surface so hidden compositor cursors do not remove
+visual feedback and remains visible after contact while the next target is
+acknowledged. The report retains only hit and miss
+counts per orientation; raw pen coordinates and trajectories are discarded.
+Tip contact is handled by GTK4's dedicated stylus gesture (`down`, `motion` and
+`up`). That stylus-only controller accepts generic Wayland logical-device names
+and missing optional tool metadata, while still rejecting an explicitly
+non-stylus tool. Pressure on a verified physical Wacom PEN source remains a
+bounded fallback. The UI reports when hover has arrived but no tip contact has been
+accepted, and the report records the source, tool type and accepted event path
+without retaining coordinates. An exact-schema parser rejects contradictory
+stage states, undeclared fields and non-plain diagnostic text; support bundles
+revalidate every nested pen result before including it.
+The workflow then requires the physical return to Halo keyboard mode and runs
+the same final state-preservation checks as every active test.
+
 The display test is passive. It validates the i915 DRM card and render node,
 the native DSI panel, GNOME Shell's live GPU file descriptors, Mutter's
 primary landscape layout, the unlocked rotation policy, the intentionally
@@ -230,7 +319,10 @@ It does not rotate the screen, change brightness or capture screen contents.
 The power test reads the battery fuel gauge and charger without changing any
 charging policy. It validates health, electrical and charge-counter ranges,
 cross-checks both charger interfaces, and confirms that UPower exposes the
-battery to the desktop.
+battery to the desktop. The `charging` test then samples both charger
+interfaces, fuel-gauge progression and conservative temperature limits for a
+bounded window. It passes either measurable charging progress or a stable
+full-charge terminal state; disconnected power is an explicit incomplete skip.
 
 The platform test reads CPU, thermal, RTC, block and kernel status without
 changing policy or power state. It reports only eMMC wear indicators and block
@@ -245,9 +337,27 @@ critical limits, available cooling devices and current platform, battery and
 charger temperatures. It reports unsafe or implausible state but never changes
 CPU, charging, cooling or service policy.
 
-The USB test validates both xHCI root hubs, the Intel role switch and the fixed
-XMM7260 `cdc_mbim` transport. It validates attached removable devices without
-logging their identity, or records SKIP when no OTG accessory is connected.
+The passive USB test validates both xHCI root hubs, the Intel role switch and
+the fixed XMM7260 `cdc_mbim` transport. A visible removable accessory remains
+incomplete until `usb-cycle` guides one insertion, verifies host role, exactly
+one authorized enumeration and a bounded descriptor transfer, then observes
+removal and restoration of the initial cable state. For removable storage it
+also reads 1 MiB. Device identities are never retained. Cancellation finalizes
+the report and requires the same verified cleanup.
+
+Passive camera readiness is causal rather than cosmetic: it requires the exact
+headers and build tree for the running kernel, a matching `v4l2loopback` module,
+and a successful preparation service exposing correctly named front and rear
+loopback devices. Missing headers block the module and service checks explicitly
+instead of collapsing the root cause into a generic failed-unit warning.
+
+The suspend test keeps hardware-muted full-duplex ALSA transport active across
+one s2idle cycle, checks client completion and xruns, and restores the desktop
+audio graph. Privacy-safe before/after snapshots additionally require the DSI
+display, input topology, IIO sensors, Wi-Fi gateway, Bluetooth, cameras,
+battery/charger and critical services to recover. Inserted SD, LTE and installed
+GNSS paths are tested when present; absent optional hardware remains an explicit
+incomplete skip.
 
 The automated suite requests authorization once, runs all transport checks in
 a deterministic order, preserves every subreport and creates a merged
@@ -256,8 +366,12 @@ evidence. Suspend remains opt-in, while the guided wired-headset workflow is a
 separate action and part of the Audio/Media category.
 
 `quiet` requests authorization once and runs the complete non-audible automated
-subset: passive diagnostics, cameras, input capability inspection, read-only SD
-validation, Wi-Fi/Bluetooth, reversible lights and service final-state checks.
+subset: passive diagnostics, an isolated APT release-metadata refresh, cameras,
+input capability inspection, read-only SD validation, Wi-Fi/Bluetooth,
+reversible lights and service final-state checks. The APT check uses disposable
+list and cache directories, disables package-index downloads, and leaves the
+system package cache untouched while requiring every configured repository to
+return valid signed release metadata.
 It excludes every playback, capture, headset, haptic, suspend and guided action
 by construction while retaining cancellation and per-subtest restoration.
 
@@ -267,9 +381,12 @@ schema, Validator version, acceptance-matrix digest, device/OS/architecture and
 the SHA-256 metadata for every required source artifact. `sources.tsv` records
 the source label, command, boot, timestamps and content digests without leaking
 absolute filesystem paths. Duplicate observations remain visible and the most
-severe result wins, so composing reports can never turn an older failure into a
-pass. Reports from another release or device, and modified artifacts, are
-rejected instead of silently mixed.
+recent conclusive observation by timestamp becomes effective. A later `SKIP` or
+`INFO` cannot erase a prior conclusive result, while a focused later `PASS` can
+resolve an earlier failure from the same exact package inventory. Every selected
+and superseded row remains in the integrity-hashed `observations.tsv` ledger and
+the source report hashes remain authoritative. Reports from another release or
+device, and modified artifacts, are rejected instead of silently mixed.
 
 The LTE test never enables, connects or disconnects the modem. Without a SIM it
 records explicit conditional skips. With a SIM it requires an already
@@ -281,7 +398,8 @@ The wired-headset test is conditional and exits before opening any PCM unless
 both four-pole jack sensors report an inserted headset. It enables only the UCM
 `Headphones` and `Headset` routes, verifies that the physical speakers remain
 muted, plays one quiet one-second tone, analyzes a three-second microphone
-capture, then guides one removal, reinsertion and supported button press. The
+capture for per-channel signal, clipping, DC offset and imbalance, then guides
+one removal, reinsertion and supported button press. The
 event device is never grabbed and the run completes only after the headset is
 inserted again. ALSA and desktop audio are restored and verified with a silent
 transport probe.
@@ -309,10 +427,11 @@ identities and does not remount an existing read-only filesystem.
 quick audit with the deeper platform, display, sensor, power, USB and GNSS
 checks without administrator access or state changes. `audio` tests PCM0 playback and
 capture in S16_LE, S24_LE and S32_LE at 48 kHz stereo, PCM1 deep-buffer
-playback, the bounded tone, and non-empty Mic1 capture. `camera` pauses the
-desktop image processor, switches the private AtomISP input, validates three
-in-memory frames from each sensor for
-payload and signal integrity, exercises one bounded rear-focus step, discards
+playback, the bounded tone, and plausible non-clipped Mic1 transport on both
+channels. Audible quality and microphone intelligibility remain explicit
+physical observations. `camera` pauses the desktop image processor, switches
+the private AtomISP input, discards two warm-up buffers, validates five
+in-memory frames from each sensor for Bayer payload and signal integrity, exercises one bounded rear-focus step, discards
 the frames and restores the original focus, input and processor state.
 `display` inspects the live i915, DSI, Micro-HDMI DRM and LPE audio, Mutter and
 GNOME Shell display stack without changing it. With Micro-HDMI connected it
@@ -321,7 +440,9 @@ sound. `haptics` plays one bounded 150 ms pulse on each
 actuator at moderate strength. `headset` validates a connected four-pole
 headset's isolated playback, microphone signal and removal/reinsertion/button
 events. `inputs` audits kernel capability maps without
-reading events. `controls` suppresses desktop actions while observing one
+reading events. `pen-stack` performs the unattended, read-only Wacom/Halo,
+libwacom, Mutter and current-orientation checks described above. `controls`
+suppresses desktop actions while observing one
 Power, Volume Up, Volume Down and lid close/reopen cycle. `modes` observes one
 physical Halo keyboard to Wacom pen to
 Halo keyboard cycle and accepts `--timeout SECONDS`. `rotation` extends that
@@ -333,11 +454,13 @@ driver set, CPU power management, thermal stack, eMMC health, root filesystem
 and RTC wake capability. `power`
 validates battery, charger and UPower telemetry. `resources` profiles the three
 Yoga Book resident services and audits thermal safeguards without changing
-policy. `sensors`
-samples the complete IIO layout and SensorProxy. `lights`
+policy. `sensors` samples the complete IIO layout and SensorProxy;
+`sensor-interactions` guides a shade/expose, near/away and hinge/return cycle
+and requires the initial physical state to be restored. `lights`
 exercises and restores the display, Halo, indicator and charging light control
-paths. `usb` audits the host hubs, role switch, fixed modem path, attached
-accessories and targeted kernel errors. `modem` validates SIM registration and
+paths. `usb` audits the host hubs, role switch, fixed modem path and targeted
+kernel errors; `usb-cycle` proves one guided physical OTG lifecycle and state
+restoration. `modem` validates SIM registration and
 packet replies over an already-connected LTE bearer without changing modem or
 NetworkManager state. `wireless` checks the current Wi-Fi
 gateway, Bluetooth controller features and bounded RF discovery while

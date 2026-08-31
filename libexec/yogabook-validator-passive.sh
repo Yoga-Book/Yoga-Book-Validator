@@ -40,11 +40,13 @@ run_subtest() {
 }
 
 run_subtest check "$LIBEXEC_DIR/yogabook-validator-check.sh"
+run_subtest apt "$LIBEXEC_DIR/yogabook-validator-apt.sh"
 run_subtest platform "$LIBEXEC_DIR/yogabook-validator-platform.sh"
 run_subtest resources "$LIBEXEC_DIR/yogabook-validator-resources.sh"
 run_subtest display "$LIBEXEC_DIR/yogabook-validator-display.sh"
 run_subtest sensors "$LIBEXEC_DIR/yogabook-validator-sensors.sh"
 run_subtest power "$LIBEXEC_DIR/yogabook-validator-power.sh"
+run_subtest charging "$LIBEXEC_DIR/yogabook-validator-charging.sh"
 run_subtest usb "$LIBEXEC_DIR/yogabook-validator-usb.sh"
 run_subtest gnss "$LIBEXEC_DIR/yogabook-validator-gnss.sh"
 

@@ -1,3 +1,2 @@
 Tests: smoke.sh
 Depends: @, desktop-file-utils
-Restrictions: superficial

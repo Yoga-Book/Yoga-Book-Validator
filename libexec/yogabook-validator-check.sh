@@ -5,6 +5,8 @@ set -Eeuo pipefail
 LIBEXEC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=yogabook-validator-common.sh
 . "$LIBEXEC_DIR/yogabook-validator-common.sh"
+# shellcheck source=yogabook-validator-camera-readiness.sh
+. "$LIBEXEC_DIR/yogabook-validator-camera-readiness.sh"
 
 output_dir=
 while (($#)); do
@@ -74,6 +76,18 @@ else
 		"GRUB_TOP_LEVEL=${grub_top_level:-unset} kernel=$kernel"
 fi
 
+kernel_selector=$(ybv_path /usr/local/sbin/yogabook-select-kernel)
+kernel_hook=$(ybv_path /etc/kernel/postinst.d/zz-00-yogabook-default)
+if [[ -x $kernel_selector && -x $kernel_hook ]] && cmp -s -- "$kernel_selector" "$kernel_hook"; then
+	ybv_emit platform grub-selection-hook PASS \
+		'Kernel package updates retain the newest Yoga Book kernel as the GRUB default' \
+		'/etc/kernel/postinst.d/zz-00-yogabook-default'
+else
+	ybv_emit platform grub-selection-hook FAIL \
+		'The fallback-safe Yoga Book kernel-selection hook is missing or inconsistent' \
+		"selector=$([[ -x $kernel_selector ]] && echo executable || echo missing) hook=$([[ -x $kernel_hook ]] && echo executable || echo missing)"
+fi
+
 check_package() {
 	local package=$1 subsystem=$2 minimum=${3:-} version
 	if ! ybv_has_command dpkg-query; then
@@ -90,13 +104,41 @@ check_package() {
 	fi
 }
 
-check_package halo-keyboard input
+check_package halo-keyboard input '1.0.0-7'
 check_package yogabook-sensors sensors
 check_package alsa-ucm-conf-yogabook audio 1.6
 check_package yogabook-camera camera 0.2.20
 check_package yogabook-gnss gnss 1.0.3
 check_package yogabook-validator platform "$YBV_VERSION"
-check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook3'
+check_package libmutter-18-0 display '50.1-0ubuntu2.2+yogabook5'
+
+ybv_check_camera_readiness "$kernel"
+
+libwacom_tablet=$(ybv_path /usr/share/libwacom/wacom-yoga-book.tablet)
+if [[ -r $libwacom_tablet ]] &&
+	grep -Fxq 'Name=Wacom HID 169' "$libwacom_tablet" &&
+	grep -Fxq 'DeviceMatch=i2c|056a|0169' "$libwacom_tablet" &&
+	grep -Fxq 'IntegratedIn=System' "$libwacom_tablet" &&
+	grep -Fxq 'Stylus=true' "$libwacom_tablet" &&
+	grep -Fxq 'Touch=false' "$libwacom_tablet"; then
+	ybv_emit input pen-display-mapping PASS \
+		'libwacom maps the Yoga Book digitizer to the integrated display' \
+		'Wacom HID 169; i2c 056a:0169; IntegratedIn=System'
+else
+	ybv_emit input pen-display-mapping FAIL \
+		'Yoga Book system-integrated libwacom metadata is missing or incomplete' \
+		"$libwacom_tablet"
+fi
+
+halo_hwdb=$(ybv_path /usr/lib/udev/hwdb.d/61-halo-keyboard.hwdb)
+if [[ -r $halo_hwdb ]] && ! grep -Fq 'LIBINPUT_CALIBRATION_MATRIX=' "$halo_hwdb"; then
+	ybv_emit input pen-dynamic-calibration PASS \
+		'halo-keyboard leaves Wacom calibration neutral for the current Mutter transform'
+else
+	ybv_emit input pen-dynamic-calibration FAIL \
+		'halo-keyboard installs a fixed calibration that can double-rotate the pen' \
+		"$halo_hwdb"
+fi
 
 if ybv_has_command dpkg; then
 	declare -a verify_packages=(yogabook-validator halo-keyboard yogabook-sensors yogabook-camera yogabook-gnss alsa-ucm-conf-yogabook libmutter-18-0)
@@ -199,6 +241,10 @@ fi
 
 input_devices=$(ybv_path /proc/bus/input/devices)
 input_text=$([[ -r $input_devices ]] && cat "$input_devices" || true)
+pen_present=false
+grep -Eiq 'Wacom HID 169 Pen|Wacom.*Pen' <<<"$input_text" && pen_present=true
+halo_required=true
+[[ $pen_present != true ]] || halo_required=false
 check_input_pattern() {
 	local id=$1 label=$2 pattern=$3 required=${4:-true}
 	if grep -Eiq "$pattern" <<<"$input_text"; then
@@ -206,24 +252,24 @@ check_input_pattern() {
 	elif [[ $required == true ]]; then
 		ybv_emit input "$id" FAIL "$label is missing"
 	else
-		ybv_emit input "$id" WARN "$label was not detected"
+		ybv_emit input "$id" SKIP "$label is intentionally inactive in drawing mode"
 	fi
 }
-check_input_pattern halo-surface 'Raw Goodix Halo touch surface' '^N: Name="Goodix Capacitive TouchScreen"$'
-check_input_pattern halo-keyboard 'Virtual Halo keyboard input' '^N: Name="Halo Keyboard"$'
-check_input_pattern halo-touchpad 'Virtual Halo touchpad input' '^N: Name="Halo Keyboard Touchpad"$'
+check_input_pattern halo-surface 'Raw Goodix Halo touch surface' '^N: Name="Goodix Capacitive TouchScreen"$' "$halo_required"
+check_input_pattern halo-keyboard 'Virtual Halo keyboard input' '^N: Name="Halo Keyboard"$' "$halo_required"
+check_input_pattern halo-touchpad 'Virtual Halo touchpad input' '^N: Name="Halo Keyboard Touchpad"$' "$halo_required"
 haptic_count=$(grep -Fc 'N: Name="drv260x:haptics"' <<<"$input_text" || true)
 if ((haptic_count == 2)); then
 	ybv_emit input haptics PASS 'Both DRV2604 haptic input devices are present' '2 devices'
+elif [[ $pen_present == true ]]; then
+	ybv_emit input haptics SKIP 'Halo haptic input devices are intentionally inactive in drawing mode'
 else
 	ybv_emit input haptics FAIL 'The dual DRV2604 haptic layout is incomplete' "$haptic_count of 2 devices"
 fi
-pen_present=false
-if grep -Eiq 'Wacom HID 169 Pen|Wacom.*Pen' <<<"$input_text"; then
-	pen_present=true
+if [[ $pen_present == true ]]; then
 	ybv_emit input wacom-pen PASS 'Wacom pen input is present'
 else
-	ybv_emit input wacom-pen SKIP 'Wacom pen input is not active; switch the Halo surface to pen mode to inspect it'
+	ybv_emit input wacom-pen-inactive SKIP 'Wacom pen input is not active; run pen-mapping to inspect it in pen mode'
 fi
 check_input_pattern touchscreen 'Display touchscreen input' 'HDP0001:00[[:space:]]+2ABB:8102|HiDeep.*2ABB:8102'
 lid_count=$(grep -Fc 'N: Name="Lid Switch"' <<<"$input_text" || true)
@@ -238,11 +284,15 @@ if [[ $YBV_SYSROOT != / ]]; then
 	ybv_emit input halo-service SKIP 'Live Halo keyboard service inspection is unavailable'
 elif ybv_has_command systemctl && systemctl is-active --quiet halo-keyboard.service; then
 	ybv_emit input halo-service PASS 'Halo keyboard service is active'
+elif [[ $pen_present == true ]]; then
+	ybv_emit input halo-service SKIP 'Halo keyboard service is intentionally inactive in drawing mode'
 else
 	ybv_emit input halo-service FAIL 'Halo keyboard service is not active'
 fi
 if [[ -e $(ybv_path /dev/halo_keyboard) ]]; then
 	ybv_emit input halo-device PASS 'Halo keyboard source device exists'
+elif [[ $pen_present == true ]]; then
+	ybv_emit input halo-device SKIP 'Halo keyboard source device is intentionally inactive in drawing mode'
 else
 	ybv_emit input halo-device FAIL 'Halo keyboard source device is missing'
 fi
@@ -301,38 +351,48 @@ if [[ $YBV_SYSROOT == / ]] && ybv_has_command udevadm; then
 	else
 		ybv_emit sensors proximity-policy FAIL 'SX9310 proximity near threshold is not configured'
 	fi
+	pen_udev_record=$(awk 'BEGIN { RS="" } /E: NAME="Wacom HID 169 Pen"/ { print; exit }' <<<"$udev_properties")
+	pen_live_calibration=$(sed -n 's/^E: LIBINPUT_CALIBRATION_MATRIX=//p' <<<"$pen_udev_record" | head -n 1)
 	if [[ $pen_present != true ]]; then
-		ybv_emit input pen-calibration SKIP 'Pen calibration is checked when the Wacom device is active'
-	elif grep -Fq 'E: LIBINPUT_CALIBRATION_MATRIX=0 1 0 -1 0 1' <<<"$udev_properties"; then
-		ybv_emit input pen-calibration PASS 'YB1-X91L Wacom calibration matrix is active' '0 1 0 -1 0 1'
+		ybv_emit input pen-calibration-deferred SKIP 'Pen calibration is checked by the guided pen-mapping workflow'
+	elif [[ -z $pen_udev_record ]]; then
+		ybv_emit input pen-calibration FAIL 'The active Wacom pen has no matching udev record'
+	elif [[ -z $pen_live_calibration || $pen_live_calibration == '1 0 0 0 1 0' ]]; then
+		ybv_emit input pen-calibration PASS \
+			'Wacom pen keeps neutral live calibration for dynamic Mutter mapping' \
+			"${pen_live_calibration:-unset}"
 	else
-		ybv_emit input pen-calibration FAIL 'YB1-X91L Wacom calibration matrix is not active'
+		ybv_emit input pen-calibration FAIL \
+			'The active Wacom pen has a fixed calibration that can conflict with display rotation' \
+			"actual=$pen_live_calibration; expected=unset-or-identity"
 	fi
 else
 	ybv_emit sensors accel-policy SKIP 'Live udev sensor policy inspection is unavailable'
 	ybv_emit sensors proximity-policy SKIP 'Live udev proximity policy inspection is unavailable'
-	ybv_emit input pen-calibration SKIP 'Live udev pen calibration inspection is unavailable'
+	ybv_emit input pen-calibration-deferred SKIP 'Live udev pen calibration inspection is unavailable'
 fi
 
 if [[ $YBV_SYSROOT == / ]] && ybv_has_command systemctl; then
 	gnss_runtime=/var/lib/yogabook-gnss/root/system/vendor/bin/gpsd
 	if [[ -x $gnss_runtime ]]; then
 		ybv_emit gnss runtime-assets PASS 'The verified private BCM4752 transport runtime is installed' "$gnss_runtime"
+		if systemctl is-active --quiet yogabook-gnss.service && systemctl is-active --quiet gpsd.socket; then
+			ybv_emit gnss services PASS 'Yoga Book GNSS transport and gpsd socket are active'
+		else
+			ybv_emit gnss services FAIL 'Yoga Book GNSS transport or gpsd socket is not active' \
+				"transport=$(systemctl is-active yogabook-gnss.service 2>/dev/null || true) gpsd-socket=$(systemctl is-active gpsd.socket 2>/dev/null || true)"
+		fi
+		gnss_pipe=/var/lib/yogabook-gnss/root/data/gps/nmeapipe
+		if [[ -p $gnss_pipe ]]; then
+			ybv_emit gnss nmea-pipe PASS 'GNSS NMEA transport pipe is present' "$gnss_pipe"
+		else
+			ybv_emit gnss nmea-pipe FAIL 'GNSS NMEA transport pipe is missing' "$gnss_pipe"
+		fi
 	else
 		ybv_emit gnss runtime-assets FAIL 'The private BCM4752 transport runtime has not been imported' \
 			'Build it from a legally obtained Lenovo Android 7.1.1 system image with yogabook-gnss-build-runtime, then run sudo yogabook-gnss-import ARCHIVE'
-	fi
-	if systemctl is-active --quiet yogabook-gnss.service && systemctl is-active --quiet gpsd.socket; then
-		ybv_emit gnss services PASS 'Yoga Book GNSS transport and gpsd socket are active'
-	else
-		ybv_emit gnss services FAIL 'Yoga Book GNSS transport or gpsd socket is not active' \
-			"transport=$(systemctl is-active yogabook-gnss.service 2>/dev/null || true) gpsd-socket=$(systemctl is-active gpsd.socket 2>/dev/null || true)"
-	fi
-	gnss_pipe=/var/lib/yogabook-gnss/root/data/gps/nmeapipe
-	if [[ -p $gnss_pipe ]]; then
-		ybv_emit gnss nmea-pipe PASS 'GNSS NMEA transport pipe is present' "$gnss_pipe"
-	else
-		ybv_emit gnss nmea-pipe FAIL 'GNSS NMEA transport pipe is missing' "$gnss_pipe"
+		ybv_emit gnss services SKIP 'GNSS services cannot start until the private runtime is imported' 'blocked_by=gnss/runtime-assets'
+		ybv_emit gnss nmea-pipe SKIP 'The GNSS NMEA pipe cannot exist until the private runtime is imported' 'blocked_by=gnss/runtime-assets'
 	fi
 else
 	ybv_emit gnss runtime-assets SKIP 'Live GNSS runtime inspection is unavailable'
@@ -595,10 +655,10 @@ else
 fi
 
 if [[ $YBV_SYSROOT == / ]] && ybv_has_command journalctl; then
-	kernel_log="$YBV_REPORT_DIR/kernel-journal.log"
-	journalctl -b -k --no-pager >"$kernel_log" 2>&1 || true
 	fatal_pattern='sof.*(ipc|firmware|topology).*(error|fail|timeout)|STREAM_PCM_PARAMS.*(error|fail)|BUG:|kernel panic|Call Trace:|I/O error.*(mmc|nvme)'
-	fatal_lines=$(grep -Ei "$fatal_pattern" "$kernel_log" || true)
+	# Keep only the bounded finding below. A complete journal can contain device
+	# identities, network addresses and removable-media metadata.
+	fatal_lines=$(journalctl -b -k --no-pager 2>/dev/null | grep -Ei "$fatal_pattern" | head -n 20 || true)
 	if [[ -z $fatal_lines ]]; then
 		ybv_emit platform kernel-fatal-scan PASS 'No targeted fatal errors in the current boot journal'
 	else

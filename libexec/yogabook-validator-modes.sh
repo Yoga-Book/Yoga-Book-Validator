@@ -16,8 +16,11 @@ transition_timeout=90
 stable_samples=10
 stable_interval=0.2
 all_orientations=false
+pen_mapping=false
 transition_trace_pid=
 transition_trace_stop_file=
+pen_trace_start_ms=
+pen_trace_end_ms=
 while (($#)); do
 	case $1 in
 	--output)
@@ -34,12 +37,20 @@ while (($#)); do
 		all_orientations=true
 		shift
 		;;
+	--pen-mapping)
+		pen_mapping=true
+		shift
+		;;
 	*)
 		echo "ERROR: unknown option: $1" >&2
 		exit 2
 		;;
 	esac
 done
+[[ $all_orientations != true || $pen_mapping != true ]] || {
+	echo 'ERROR: --all-orientations and --pen-mapping are mutually exclusive' >&2
+	exit 2
+}
 [[ $transition_timeout =~ ^[1-9][0-9]*$ ]] || {
 	echo 'ERROR: transition timeout must be a positive integer' >&2
 	exit 2
@@ -57,7 +68,11 @@ fi
 
 report_name=modes
 [[ $all_orientations == false ]] || report_name=rotation
+[[ $pen_mapping == false ]] || report_name=pen-mapping
 ybv_begin_report "$report_name" "$output_dir"
+ybv_register_state_keys \
+	'system-service:halo-keyboard.service' \
+	'desktop:orientation-lock' 'desktop:screen-keyboard' 'desktop:mutter'
 
 finish_modes() {
 	local finish_rc=0
@@ -83,7 +98,7 @@ stop_transition_trace() {
 	fi
 }
 
-trap 'stop_transition_trace' EXIT INT TERM
+trap 'stop_transition_trace' EXIT
 
 find_input_node() {
 	local wanted=$1
@@ -110,6 +125,27 @@ PY
 
 input_present() {
 	find_input_node "$1" >/dev/null 2>&1
+}
+
+wacom_binding_state() {
+	local device driver
+	device=$(ybv_path /sys/bus/i2c/devices/i2c-WCOM0019:00)
+	if [[ ! -e $device ]]; then
+		printf 'missing\n'
+		return
+	fi
+	if [[ -L $device/driver ]]; then
+		driver=$(basename "$(readlink -f "$device/driver")")
+		printf 'bound:%s\n' "$driver"
+	else
+		printf 'unbound\n'
+	fi
+}
+
+wacom_binding_ready() {
+	local state=$1 module
+	module=$(ybv_path /sys/module/wacom)
+	[[ $state == bound:i2c_hid* && -d $module ]]
 }
 
 find_pen_node() {
@@ -191,7 +227,8 @@ scan_transition_journal() {
 }
 
 wait_for_keyboard() {
-	local deadline=$((SECONDS + transition_timeout)) consecutive=0
+	local wait_timeout=${1:-$transition_timeout}
+	local deadline=$((SECONDS + wait_timeout)) consecutive=0
 	while ((SECONDS < deadline)); do
 		if ! input_present 'Wacom HID 169 Pen' && halo_ready; then
 			((++consecutive))
@@ -205,6 +242,29 @@ wait_for_keyboard() {
 	done
 	return 1
 }
+
+# Invoked indirectly by the INT/TERM trap below.
+# shellcheck disable=SC2329
+cancel_modes() {
+	local finish_rc=0
+	trap - INT TERM
+	set +e
+	stop_transition_trace
+	ybv_emit input mode-cancelled FAIL \
+		'Guided mode validation was cancelled before normal completion'
+	action_required 'Return the Yoga Book to Halo keyboard mode now so cancellation can restore and verify the initial state.'
+	if wait_for_keyboard 25; then
+		ybv_emit input cancellation-keyboard-restored PASS \
+			'Halo keyboard mode was restored during cancellation cleanup'
+	else
+		ybv_emit input cancellation-keyboard-restored FAIL \
+			'Halo keyboard mode was not restored within the cancellation cleanup window'
+	fi
+	finish_modes || finish_rc=$?
+	exit 130
+}
+
+trap 'cancel_modes' INT TERM
 
 start_transition_trace() {
 	local trace_file="$YBV_REPORT_DIR/mode-transition.tsv"
@@ -340,6 +400,101 @@ exercise_all_orientations() {
 	return 1
 }
 
+emit_pen_mapping_failure() {
+	local reason=$1 check_id
+	for check_id in landscape-start portrait-right landscape-inverted portrait-left landscape-return; do
+		ybv_emit input "pen-mapping-$check_id" FAIL \
+			'Post-Mutter pen target mapping was not completed' "$reason"
+	done
+	ybv_emit input pen-mapping-stylus-source FAIL \
+		'No complete Wacom stylus-only target sequence was verified' "$reason"
+}
+
+emit_pen_continuity() {
+	local trace_file="$YBV_REPORT_DIR/mode-transition.tsv" analysis samples=0 dropouts=0
+	if [[ -n $pen_trace_start_ms && -n $pen_trace_end_ms ]]; then
+		if analysis=$(python3 "$LIBEXEC_DIR/yogabook-validator-mode-trace-result.py" \
+			"$trace_file" "$pen_trace_start_ms" "$pen_trace_end_ms" 2>>"$YBV_LOG"); then
+			IFS=$'\t' read -r samples dropouts <<<"$analysis"
+		fi
+	fi
+	if ((samples > 0 && dropouts == 0)); then
+		ybv_emit input pen-continuity PASS \
+			'Wacom pen input remained continuously present throughout pen mode' \
+			"samples=$samples interval=100ms"
+	else
+		ybv_emit input pen-continuity FAIL \
+			'Wacom pen input disappeared or could not be sampled during pen mode' \
+			"samples=$samples dropouts=$dropouts interval=100ms"
+	fi
+}
+
+run_pen_mapping() {
+	local result_file="$YBV_REPORT_DIR/pen-mapping.json" parsed_file="$YBV_REPORT_DIR/.pen-mapping.tsv"
+	local wayland_socket helper_rc=0
+	local kind check_id status label sensor transform hits misses result contact_count
+	local _source _tool _event_path rejected
+	wayland_socket=$(find "/run/user/$(id -u "$real_user")" -maxdepth 1 -type s \
+		-name 'wayland-*' -printf '%f\n' 2>/dev/null | LC_ALL=C sort | head -n 1)
+	if [[ -z $wayland_socket ]]; then
+		emit_pen_mapping_failure 'No Wayland compositor socket is available for the desktop user'
+		return 0
+	fi
+	action_required "Use only the Wacom pen to hit the four targets in each orientation. Finger and mouse input are ignored. Complete all four orientations and return upright within ${transition_timeout} seconds."
+	set +e
+	ybv_run_as_user "$real_user" env \
+		WAYLAND_DISPLAY="$wayland_socket" GDK_BACKEND=wayland \
+		"$LIBEXEC_DIR/yogabook-validator-pen-targets.py" \
+		--output "$result_file" --timeout "$transition_timeout" \
+		2>&1 | tee -a "$YBV_LOG"
+	helper_rc=${PIPESTATUS[0]}
+	set -e
+	if [[ ! -s $result_file ]]; then
+		rm -f -- "$result_file"
+		emit_pen_mapping_failure "The GTK/Wayland target helper produced no result; exit=$helper_rc"
+		return 0
+	fi
+	if ((helper_rc != 0)); then
+		rm -f -- "$result_file"
+		emit_pen_mapping_failure "The GTK/Wayland target helper exited unexpectedly; exit=$helper_rc"
+		return 0
+	fi
+	if ! python3 "$LIBEXEC_DIR/yogabook-validator-pen-result.py" \
+		"$result_file" >"$parsed_file" 2>>"$YBV_LOG"; then
+		rm -f -- "$parsed_file" "$result_file"
+		emit_pen_mapping_failure 'The pen target result was malformed'
+		return 0
+	fi
+	while IFS=$'\t' read -r kind check_id status label sensor transform hits misses result contact_count _source _tool _event_path rejected accepted_paths accepted_verifiers provenance_valid; do
+		case $kind in
+		stage)
+			if [[ $status == PASS && $hits == 4 ]]; then
+				ybv_emit input "pen-mapping-$check_id" PASS \
+					"Wacom pen targets matched the $label display transform" \
+					"sensor=$sensor transform=$transform hits=$hits misses=$misses"
+			else
+				ybv_emit input "pen-mapping-$check_id" FAIL \
+					"Wacom pen targets did not complete in $label" \
+					"sensor=$sensor transform=$transform hits=$hits misses=$misses result=$result"
+			fi
+			;;
+		summary)
+			if [[ $result == PASS && $contact_count == 20 && $provenance_valid == true ]]; then
+				ybv_emit input pen-mapping-stylus-source PASS \
+					'Every accepted target came from a validated GTK stylus event after Mutter mapping' \
+					"contacts=$contact_count events=$accepted_paths verified-by=$accepted_verifiers rejected=$rejected; raw coordinates discarded"
+			else
+				ybv_emit input pen-mapping-stylus-source FAIL \
+					'The stylus-only post-Mutter target sequence was incomplete' \
+					"result=$result contacts=${contact_count:-0} provenance=$provenance_valid exit=$helper_rc"
+			fi
+			;;
+		esac
+	done <"$parsed_file"
+	rm -f -- "$parsed_file"
+	return 0
+}
+
 compare_state() {
 	local check_id=$1 label=$2 expected=$3 actual=$4
 	if [[ $actual == "$expected" ]]; then
@@ -375,10 +530,19 @@ if input_present 'HDP0001:00 2ABB:8102'; then
 else
 	ybv_emit input touchscreen-start FAIL 'Display touchscreen is missing at the start'
 fi
+baseline_wacom_binding=$(wacom_binding_state)
 if input_present 'Wacom HID 169 Pen'; then
-	ybv_emit input pen-start FAIL 'Wacom pen is already active; start this test in Halo keyboard mode'
+	ybv_emit input pen-start FAIL \
+		'Wacom pen is already active; start this test in Halo keyboard mode' \
+		"binding=$baseline_wacom_binding"
+elif [[ $baseline_wacom_binding == unbound ]]; then
+	ybv_emit input pen-start PASS \
+		'Wacom pen is inactive and its I2C-HID device is unbound in Halo keyboard mode' \
+		"binding=$baseline_wacom_binding"
 else
-	ybv_emit input pen-start PASS 'Wacom pen is inactive in Halo keyboard mode'
+	ybv_emit input pen-start FAIL \
+		'Wacom pen input is absent but its expected keyboard-mode binding state is not proven' \
+		"binding=$baseline_wacom_binding"
 fi
 
 baseline_display=$(ybv_mutter_state "$real_user" 2>>"$YBV_LOG" || true)
@@ -414,7 +578,18 @@ fi
 action_required "Switch the Yoga Book from Halo keyboard mode to drawing/pen mode within ${transition_timeout} seconds."
 if wait_for_pen; then
 	pen_node=$(find_pen_node)
-	ybv_emit input pen-appeared PASS 'Wacom pen remained present for two seconds after the physical mode switch'
+	pen_wacom_binding=$(wacom_binding_state)
+	if wacom_binding_ready "$pen_wacom_binding"; then
+		ybv_emit input pen-appeared PASS \
+			'Wacom pen remained present with its I2C-HID and Wacom drivers ready after the physical mode switch' \
+			"binding=$pen_wacom_binding module=wacom"
+	else
+		ybv_emit input pen-appeared FAIL \
+			'Wacom pen input appeared but its complete driver binding is not proven' \
+			"binding=$pen_wacom_binding module=$([[ -d $(ybv_path /sys/module/wacom) ]] && printf loaded || printf missing)"
+	fi
+	ybv_emit input wacom-pen PASS 'Wacom pen input is active in drawing mode' "$pen_node"
+	pen_trace_start_ms=$(tail -n 1 "$YBV_REPORT_DIR/mode-transition.tsv" | cut -f2)
 else
 	ybv_emit input pen-appeared FAIL "Wacom pen did not appear within ${transition_timeout} seconds"
 	scan_transition_journal
@@ -457,10 +632,14 @@ calibration=$(
 	udevadm info --query=property --name="$pen_node" 2>>"$YBV_LOG" |
 		sed -n 's/^LIBINPUT_CALIBRATION_MATRIX=//p' | head -n 1 || true
 )
-if [[ $calibration == '0 1 0 -1 0 1' ]]; then
-	ybv_emit input pen-calibration PASS 'Wacom pen has the Yoga Book libinput calibration matrix' "$calibration"
+if [[ -z $calibration || $calibration == '1 0 0 0 1 0' ]]; then
+	ybv_emit input pen-calibration PASS \
+		'Wacom pen keeps a neutral libinput matrix for dynamic Mutter mapping' \
+		"${calibration:-unset}"
 else
-	ybv_emit input pen-calibration FAIL 'Wacom pen calibration matrix is missing or incorrect' "actual=${calibration:-unset}; expected=0 1 0 -1 0 1"
+	ybv_emit input pen-calibration FAIL \
+		'Wacom pen has a fixed calibration that can conflict with display rotation' \
+		"actual=$calibration; expected=unset-or-identity"
 fi
 if input_present 'HDP0001:00 2ABB:8102'; then
 	ybv_emit input touchscreen-pen-mode PASS 'Display touchscreen remains present in pen mode'
@@ -473,7 +652,10 @@ pen_settings=$(desktop_settings 2>>"$YBV_LOG" || true)
 compare_state settings-pen-mode 'GNOME orientation-lock and onscreen-keyboard settings in pen mode' "$baseline_settings" "$pen_settings"
 if [[ $all_orientations == true ]]; then
 	exercise_all_orientations || true
+elif [[ $pen_mapping == true ]]; then
+	run_pen_mapping
 fi
+pen_trace_end_ms=$(tail -n 1 "$YBV_REPORT_DIR/mode-transition.tsv" | cut -f2)
 
 action_required "Switch the Yoga Book back to Halo keyboard mode within ${transition_timeout} seconds."
 if wait_for_keyboard; then
@@ -482,10 +664,19 @@ else
 	ybv_emit input keyboard-returned FAIL "Halo keyboard mode was not ready within ${transition_timeout} seconds"
 fi
 
+final_wacom_binding=$(wacom_binding_state)
 if input_present 'Wacom HID 169 Pen'; then
-	ybv_emit input pen-disappeared FAIL 'Wacom pen remains active after returning to keyboard mode'
+	ybv_emit input pen-disappeared FAIL \
+		'Wacom pen remains active after returning to keyboard mode' \
+		"binding=$final_wacom_binding"
+elif [[ $final_wacom_binding == unbound ]]; then
+	ybv_emit input pen-disappeared PASS \
+		'Wacom pen is inactive and its I2C-HID device is unbound after returning to keyboard mode' \
+		"binding=$final_wacom_binding"
 else
-	ybv_emit input pen-disappeared PASS 'Wacom pen is inactive after returning to keyboard mode'
+	ybv_emit input pen-disappeared FAIL \
+		'Wacom pen input is absent but its expected keyboard-mode binding state was not restored' \
+		"binding=$final_wacom_binding"
 fi
 if systemctl is-active --quiet halo-keyboard.service; then
 	ybv_emit input halo-service-restored PASS 'Halo keyboard service is active after the mode cycle'
@@ -523,6 +714,7 @@ final_settings=$(desktop_settings 2>>"$YBV_LOG" || true)
 compare_state settings-restored 'GNOME orientation-lock and onscreen-keyboard settings after the mode cycle' "$baseline_settings" "$final_settings"
 
 stop_transition_trace
+emit_pen_continuity
 trace_samples=$(($(wc -l <"$YBV_REPORT_DIR/mode-transition.tsv") - 1))
 if ((trace_samples > 0)); then
 	ybv_emit display transition-trace-complete PASS 'Captured synchronized SensorProxy, Mutter and input-mode samples' "samples=$trace_samples; mode-transition.tsv"

@@ -20,6 +20,11 @@ done
 ybv_require_x91l || { echo 'ERROR: lights tests are restricted to Lenovo YB1-X91L' >&2; exit 2; }
 
 ybv_begin_report lights "$output_dir"
+ybv_register_state_keys \
+	'sysfs:intel_backlight:brightness' \
+	'sysfs:ybwmi::kbd_backlight:*' \
+	'sysfs:platform::indicator:*' \
+	'sysfs:platform::charging:*'
 real_user=$(ybv_real_user)
 [[ $real_user != root ]] || real_user=
 backlight=/sys/class/backlight/intel_backlight

@@ -1,13 +1,105 @@
 {
   "schema": "org.yogabook.validator.acceptance/v1",
   "unimplemented_selectors": [],
+  "freshness_policies": {
+    "physical/*": {"max_age_hours": 720},
+    "physical/charging": {"max_age_hours": 24},
+    "physical/lte-data": {"max_age_hours": 24},
+    "physical/suspend-resume": {"max_age_hours": 24},
+    "physical/usb-otg": {"max_age_hours": 168},
+    "physical/sd-card": {"max_age_hours": 168},
+    "physical/wifi": {"max_age_hours": 168},
+    "physical/bluetooth": {"max_age_hours": 168},
+    "physical/gnss": {"max_age_hours": 168},
+    "physical/micro-hdmi": {"max_age_hours": 168},
+    "physical/thermal-stability": {"max_age_hours": 168},
+    "physical/cold-boots": {"max_age_hours": 168},
+    "physical/reboot": {"max_age_hours": 168},
+    "physical/poweroff": {"max_age_hours": 168},
+    "power/battery-telemetry": {"max_age_hours": 24},
+    "power/battery-charge-data": {"max_age_hours": 24},
+    "power/charger-state": {"max_age_hours": 24},
+    "power/charger-telemetry": {"max_age_hours": 24},
+    "power/upower": {"max_age_hours": 24},
+    "power/charger-continuity": {"max_age_hours": 24},
+    "power/charge-progress": {"max_age_hours": 24},
+    "power/charge-temperature": {"max_age_hours": 24},
+    "power/charge-stability": {"max_age_hours": 24},
+    "power/charge-session": {"max_age_hours": 24},
+    "modem/sim": {"max_age_hours": 24},
+    "modem/registration": {"max_age_hours": 24},
+    "modem/ip-traffic": {"max_age_hours": 24},
+    "usb/cycle-*": {"max_age_hours": 168},
+    "storage/sd-card": {"max_age_hours": 24},
+    "storage/sd-block-read": {"max_age_hours": 168},
+    "suite/storage-write": {"max_age_hours": 168},
+    "storage/root-file-io": {"max_age_hours": 168},
+    "storage/discard-maintenance": {"max_age_hours": 168},
+    "storage/root-kernel-errors": {"max_age_hours": 24},
+    "physical/internal-storage": {"max_age_hours": 168},
+    "suspend/*": {"max_age_hours": 24}
+  },
+  "selector_contracts": {
+    "sensors/layout-*": {
+      "required_match_ids": [
+        "sensors/layout-als",
+        "sensors/layout-accel_3d",
+        "sensors/layout-hinge",
+        "sensors/layout-sx9310"
+      ],
+      "allow_additional_matches": false
+    },
+    "sensors/*-accelerometer": {
+      "minimum_matches": 4,
+      "maximum_matches": 4,
+      "allow_additional_matches": true
+    },
+    "sensors/*-als": {
+      "minimum_matches": 2,
+      "maximum_matches": 2,
+      "allow_additional_matches": true
+    },
+    "sensors/*-hinge": {
+      "minimum_matches": 2,
+      "maximum_matches": 2,
+      "allow_additional_matches": true
+    },
+    "sensors/*-proximity": {
+      "minimum_matches": 1,
+      "maximum_matches": 1,
+      "allow_additional_matches": true
+    },
+    "usb/root-hub-*": {
+      "required_match_ids": [
+        "usb/root-hub-usb1",
+        "usb/root-hub-usb2"
+      ],
+      "allow_additional_matches": false
+    },
+    "resources/*-headroom": {
+      "required_match_ids": [
+        "resources/halo-keyboard-headroom",
+        "resources/yogabook-camera-headroom"
+      ],
+      "optional_match_ids": ["resources/yogabook-gnss-headroom"],
+      "allow_additional_matches": false
+    },
+    "resources/*-cpu": {
+      "required_match_ids": [
+        "resources/halo-keyboard-cpu",
+        "resources/yogabook-camera-cpu"
+      ],
+      "optional_match_ids": ["resources/yogabook-gnss-cpu"],
+      "allow_additional_matches": false
+    }
+  },
   "components": [
     {
       "id": "boot-kernel",
-      "name": "Boot and kernel",
+      "name": "Boot, kernel and software sources",
       "layers": {
-        "structural": ["platform/kernel", "platform/grub-default", "platform/package-integrity"],
-        "functional": ["suite/stability"],
+        "structural": ["platform/kernel", "platform/grub-default", "platform/grub-selection-hook", "platform/package-integrity", "platform/apt-sources"],
+        "functional": ["platform/apt-update", "suite/stability"],
         "physical": ["physical/cold-boots"]
       }
     },
@@ -51,8 +143,8 @@
       "id": "pen",
       "name": "Pen and drawing surface",
       "layers": {
-        "structural": ["input/wacom-pen", "input/pen-calibration"],
-        "functional": ["input/pen-appeared", "input/pen-capabilities", "input/pen-disappeared"],
+        "structural": ["input/wacom-pen", "input/pen-calibration", "input/pen-display-mapping", "input/pen-dynamic-calibration", "input/pen-halo-package", "display/pen-mutter-package", "input/pen-hardware-identity", "input/pen-live-calibration", "input/pen-package-integrity"],
+        "functional": ["input/pen-mode-coherence", "display/pen-rotation-policy", "display/pen-current-transform", "input/pen-appeared", "input/pen-continuity", "input/pen-capabilities", "input/pen-disappeared", "input/pen-mapping-landscape-start", "input/pen-mapping-portrait-right", "input/pen-mapping-landscape-inverted", "input/pen-mapping-portrait-left", "input/pen-mapping-landscape-return", "input/pen-mapping-stylus-source"],
         "physical": ["physical/pen-direction", "physical/pen-pressure"]
       }
     },
@@ -70,8 +162,24 @@
       "name": "Rotation and sensors",
       "layers": {
         "structural": ["sensors/iio-layout", "sensors/sensor-proxy-capabilities", "display/rotation-policy"],
-        "functional": ["sensors/layout-*", "sensors/*-accelerometer", "display/rotation-upright-return"],
-        "physical": ["physical/auto-rotation"]
+        "functional": [
+          "sensors/layout-*",
+          "sensors/*-accelerometer",
+          "sensors/*-als",
+          "sensors/*-hinge",
+          "sensors/*-proximity",
+          "sensors/sensor-proxy-live",
+          "sensors/ambient-light-response",
+          "sensors/proximity-response",
+          "sensors/hinge-response",
+          "display/rotation-upright-return"
+        ],
+        "physical": [
+          "physical/auto-rotation",
+          "physical/ambient-light-response",
+          "physical/proximity-response",
+          "physical/hinge-angle"
+        ]
       }
     },
     {
@@ -79,7 +187,7 @@
       "name": "Speakers and microphones",
       "layers": {
         "structural": ["audio/alsa-card", "audio/sof-firmware", "audio/sof-topology", "audio/ucm-alias", "audio/ucm-devices", "audio/pipewire"],
-        "functional": ["audio/speaker-tone", "audio/mic-signal", "audio/state-restore"],
+        "functional": ["audio/state-snapshot", "audio/desktop-profile", "audio/exclusive-access", "audio/ucm-routes", "audio/playback-level-cap", "audio/speaker-tone", "audio/mic-signal", "audio/state-restore"],
         "physical": ["physical/speakers", "physical/internal-microphone"]
       }
     },
@@ -88,7 +196,7 @@
       "name": "Headset path",
       "layers": {
         "structural": ["audio/ucm-devices", "input/headset-jack-capabilities"],
-        "functional": ["audio/headset-playback", "audio/headset-capture", "input/headset-events"],
+        "functional": ["audio/state-snapshot", "audio/desktop-profile", "audio/exclusive-access", "audio/ucm-routes", "audio/playback-level-cap", "audio/headset-playback", "audio/headset-capture", "input/headset-events", "audio/state-restore"],
         "physical": ["physical/headphones", "physical/headset-microphone", "physical/jack-detection", "physical/headset-buttons"]
       }
     },
@@ -96,7 +204,7 @@
       "id": "cameras",
       "name": "Cameras",
       "layers": {
-        "structural": ["camera/atomisp", "camera/sensor-ov2740", "camera/sensor-ov8858", "camera/focus-actuator"],
+        "structural": ["camera/kernel-headers", "camera/v4l2loopback-module", "camera/prepare-service", "camera/atomisp", "camera/sensor-ov2740", "camera/sensor-ov8858", "camera/focus-actuator"],
         "functional": ["camera/front-stream", "camera/front-signal", "camera/rear-stream", "camera/rear-signal", "camera/focus-control", "camera/route-restore"],
         "physical": ["physical/front-camera", "physical/rear-camera"]
       }
@@ -124,8 +232,17 @@
       "name": "USB OTG",
       "layers": {
         "structural": ["usb/controller", "usb/root-hub-*", "usb/role-switch"],
-        "functional": ["usb/removable-device", "usb/kernel-errors"],
+        "functional": ["usb/cycle-role-host", "usb/cycle-enumeration", "usb/cycle-control-transfer", "usb/cycle-removal", "usb/cycle-state-restore", "usb/cycle-kernel-errors"],
         "physical": ["physical/usb-otg"]
+      }
+    },
+    {
+      "id": "internal-storage",
+      "name": "Internal eMMC storage",
+      "layers": {
+        "structural": ["storage/emmc", "storage/emmc-transport", "storage/emmc-health", "storage/root-filesystem"],
+        "functional": ["storage/discard-maintenance", "storage/root-file-io", "storage/root-kernel-errors"],
+        "physical": ["physical/internal-storage"]
       }
     },
     {
@@ -160,7 +277,7 @@
       "name": "Battery and charging",
       "layers": {
         "structural": ["power/battery-identity", "power/battery-health", "power/charger-identity"],
-        "functional": ["power/battery-telemetry", "power/battery-charge-data", "power/charger-state", "power/charger-telemetry", "power/upower"],
+        "functional": ["power/battery-telemetry", "power/battery-charge-data", "power/charger-state", "power/charger-telemetry", "power/upower", "power/charger-continuity", "power/charge-progress", "power/charge-temperature", "power/charge-stability", "power/charge-session"],
         "physical": ["physical/charging"]
       }
     },
@@ -178,7 +295,7 @@
       "name": "Suspend/resume",
       "layers": {
         "structural": ["platform/suspend-plumbing"],
-        "functional": ["suspend/rtcwake", "suspend/playback-after", "suspend/capture-after", "suspend/stream-xruns", "suspend/fatal-scan"],
+        "functional": ["suspend/resume-baseline", "suspend/rtcwake", "suspend/playback-after", "suspend/capture-after", "suspend/stream-xruns", "suspend/fatal-scan", "suspend/resume-display", "suspend/resume-inputs", "suspend/resume-sensors", "suspend/resume-wifi", "suspend/resume-bluetooth", "suspend/resume-camera", "suspend/resume-power", "suspend/resume-storage", "suspend/resume-modem", "suspend/resume-gnss", "suspend/resume-services"],
         "physical": ["physical/suspend-resume"]
       }
     },

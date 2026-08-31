@@ -32,6 +32,6 @@ ybv_enforce_playback_level_cap() {
 	amixer -c yogabook cget name='DAC1 Playback Volume' 2>>"$log_file" |
 		grep -Fq "values=$dac_left,$dac_right" || return 1
 
-	printf 'master=%s,%s/32 (max -16 dB) dac1=%s,%s/127 (max 0 dB) tone=8%%\n' \
+	printf 'master-index=%s,%s/32 dac1-index=%s,%s/127 tone-digital-amplitude=8%%\n' \
 		"$master_left" "$master_right" "$dac_left" "$dac_right"
 }

@@ -16,11 +16,12 @@ Usage: yogabook-validator COMMAND [OPTIONS]
 
 Commands:
   automated              Run all non-suspend automated validation
+  apt                    Verify configured repositories with isolated metadata
   check                  Run the passive full-stack audit
   passive                Run every read-only validation as one merged suite
   category NAME          Run one compatible validation category as a merged suite
   audio                  Run state-safe audio transport and signal tests
-  camera                 Stream three frames from both cameras and restore route
+  camera                 Analyze five post-warmup frames per camera and restore route
   controls               Observe Power, Volume and lid events without actions
   display                Inspect i915, DSI, Mutter and desktop display policy
   haptics                Pulse both Halo haptic actuators for 150 ms
@@ -29,18 +30,24 @@ Commands:
   lights                 Exercise and restore panel and platform lights
   modem                  Validate existing LTE registration and packet transport
   modes                  Observe a physical keyboard to pen to keyboard cycle
+  pen-stack              Inspect the automatic pen-mapping software stack
+  pen-mapping            Verify Wacom pen mapping after every display rotation
   rotation               Verify all four automatic display orientations
   platform               Inspect SoC, CPU, thermal, eMMC and RTC health
+  internal-storage       Write, verify and remove a bounded root-filesystem probe
   power                  Validate battery, charger and desktop telemetry
+  charging               Observe sustained charging or a stable full state
   quiet                  Run all non-audible, non-haptic automated diagnostics
   dossier REPORT...      Compose compatible reports into an acceptance dossier
   resources              Profile Yoga Book services and thermal safeguards
   sensors                Sample every Yoga Book IIO sensor channel
+  sensor-interactions    Guide ALS, proximity and hinge response measurements
   stability ACTION       Track operator-confirmed cold-boot validation
   storage                Read the inserted SD card without writing to it
   storage-write          Write/read/delete a bounded SD filesystem test file
   suspend [SECONDS]      Run active audio across one suspend/resume cycle
   usb                    Inspect USB hubs, role switch and device transport
+  usb-cycle              Guide one USB OTG insertion, transfer and removal cycle
   wireless               Test Wi-Fi gateway and bounded Bluetooth discovery
   gnss [OPTIONS]         Inspect GNSS; optionally require sky or a fix
   physical               Record guided physical acceptance
@@ -59,14 +66,14 @@ command_name=${1:-help}
 [[ $# -eq 0 ]] || shift
 
 case $command_name in
-check | display | dossier | gnss | modem | passive | physical | full | bundle | platform | power | resources | sensors | stability | usb)
+apt | charging | check | display | dossier | gnss | modem | passive | pen-stack | physical | full | bundle | platform | power | resources | sensors | stability | usb)
 	exec "$LIBEXEC_DIR/yogabook-validator-$command_name.sh" "$@"
 	;;
 report)
 	[[ $# -eq 1 ]] || { echo 'Usage: yogabook-validator report DIRECTORY' >&2; exit 2; }
 	exec python3 "$LIBEXEC_DIR/yogabook-validator-report.py" --print-summary "$1"
 	;;
-audio | automated | camera | category | controls | haptics | headset | inputs | lights | modes | quiet | rotation | storage | storage-write | suspend | wireless)
+audio | automated | camera | category | controls | haptics | headset | inputs | internal-storage | lights | modes | pen-mapping | quiet | rotation | sensor-interactions | storage | storage-write | suspend | usb-cycle | wireless)
 	if [[ $EUID -eq 0 ]]; then
 		exec "$LIBEXEC_DIR/yogabook-validator-active.sh" "$command_name" "$@"
 	elif command -v pkexec >/dev/null 2>&1; then
